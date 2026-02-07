@@ -59,6 +59,11 @@ self.addEventListener('message', event => {
 self.addEventListener('fetch', event => {
   const requestUrl = new URL(event.request.url);
 
+  // Let the browser handle stats pages directly (basic auth requires native handling)
+  if (requestUrl.pathname === '/stats.php' || requestUrl.pathname === '/stats') {
+    return;
+  }
+
   // Strategy: Network First, falling back to Cache for Data files
   // This ensures users get fresh data if online, but the app still works offline
   // because the data was pre-cached during the install event.

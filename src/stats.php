@@ -236,7 +236,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         .data-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--divider-color); }
         .data-row:last-child { border-bottom: none; }
 
-        /* Standard Controls Sync with index.php */
+        /* Standard Controls — matching index.php filter-sort-section */
         label {
             font-weight: 600;
             display: block;
@@ -248,20 +248,20 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             padding: 0.5rem;
             border: 1px solid var(--input-border-color);
             border-radius: 0.375rem;
-            margin-bottom: 0.5rem;
             background-color: var(--input-background-color);
             color: var(--input-text-color);
             transition: border-color 0.2s, box-shadow 0.2s;
             width: 100%;
+            height: 36px;
         }
-        
+
         select:focus {
             outline: none;
             border-color: var(--palette-text-primary);
             box-shadow: 0 0 3px 1px var(--palette-text-primary);
         }
 
-        .btn { background: var(--button-primary-background-color); color: white; padding: 0.5rem 1.5rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; border: none; }
+        .btn { background: var(--button-primary-background-color); color: white; padding: 0 1.5rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; border: none; height: 36px; }
         .btn:hover { background-color: var(--button-primary-hover-bg); cursor: pointer; }
     </style>
 </head>
@@ -276,11 +276,12 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             Stats - <?php echo htmlspecialchars($festivalTitle); ?>
         </h1>
 
-        <!-- Administrative Controls Structure matching index.php filters -->
+        <!-- Administrative Controls -->
         <div class="highlight-section mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-center">
-                <div>
-                    <select id="session-select" onchange="refreshData()" class="w-full">
+            <div class="flex flex-col md:flex-row md:items-end gap-4">
+                <div class="w-full md:w-48">
+                    <label for="session-select"><?php echo t('session', 'Session'); ?></label>
+                    <select id="session-select" onchange="refreshData()">
                         <option value=""><?php echo t('all_sessions', 'All Sessions'); ?></option>
                         <?php foreach ($initialData['available_sessions'] as $s): ?>
                             <option value="<?php echo htmlspecialchars($s); ?>">
@@ -290,22 +291,14 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     </select>
                 </div>
 
-                <div></div>
-
-                <div class="flex flex-col items-center md:items-end gap-2">
-                    <button class="btn w-full md:w-auto" onclick="refreshData()">
+                <div class="flex items-center gap-4 md:ml-auto">
+                    <label for="auto-reload" class="inline-flex items-center gap-2 cursor-pointer text-sm" style="margin: 0;">
+                        <input type="checkbox" id="auto-reload" checked class="w-4 h-4 rounded border-gray-300">
+                        <span>Auto-refresh (30s)</span>
+                    </label>
+                    <button class="btn whitespace-nowrap" onclick="refreshData()">
                         Manual Sync
                     </button>
-
-                    <label for="auto-reload" class="flex items-center gap-2 cursor-pointer leading-none">
-                        <input
-                            type="checkbox"
-                            id="auto-reload"
-                            checked
-                            class="w-4 h-4 rounded border-gray-300"
-                        >
-                        <span class="text-sm">Auto-refresh (30s)</span>
-                    </label>
                 </div>
             </div>
         </div>

@@ -7,11 +7,16 @@ services:
       - "8181:80"
     volumes:
       - ./src:/var/www/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      STATS_USER: "admin"
+      STATS_PASSWORD: "changeme"
     depends_on:
       - php
     networks:
       - beer_festival_network
+    entrypoint: ["sh", "/entrypoint.sh"]
 
   php:
     image: php:8.2-fpm-alpine
