@@ -10,8 +10,10 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/entrypoint.sh:/entrypoint.sh:ro
     environment:
-      STATS_USER: "admin"
+      STATS_USER: "stats"
       STATS_PASSWORD: "changeme"
+      ADMIN_USER: "admin"
+      ADMIN_PASSWORD: "changeme"
     depends_on:
       - php
     networks:
@@ -23,6 +25,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./src:/var/www/html:ro
+      - ./src/data:/var/www/html/data:rw
       - ./logs/:/var/log/mybeerfest:rw
     environment:
       DOMAIN: "beerfest.craftbeer.dk"

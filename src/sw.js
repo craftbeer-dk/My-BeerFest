@@ -1,6 +1,6 @@
 // Service Worker for PWA functionality (caching and offline support)
 
-const CACHE_NAME = 'beerfest-cache-v2'; // Increment cache version to force update
+const CACHE_NAME = 'beerfest-cache-v3'; // Increment cache version to force update
 // These are the core files that make up the app's "shell".
 const APP_SHELL_URLS = [
   '/',
@@ -60,7 +60,9 @@ self.addEventListener('fetch', event => {
   const requestUrl = new URL(event.request.url);
 
   // Let the browser handle stats pages directly (basic auth requires native handling)
-  if (requestUrl.pathname === '/stats.php' || requestUrl.pathname === '/stats') {
+  if (requestUrl.pathname === '/stats.php' || requestUrl.pathname === '/stats' ||
+      requestUrl.pathname === '/admin.php' || requestUrl.pathname === '/admin' ||
+      requestUrl.pathname === '/admin_api.php' || requestUrl.pathname === '/admin_api') {
     return;
   }
 
