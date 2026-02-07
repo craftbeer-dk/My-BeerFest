@@ -36,6 +36,7 @@ $enableMainstyleFiltering = getenv('ENABLE_MAINSTYLE_FILTERING') === 'true';
 $contactEmail = getenv('CONTACT_EMAIL') ?: 'contact@mybeerfest.com';
 $themeColor = getenv('THEME_COLOR') ?: '#2B684B';
 $festivalTitleShort = getenv('FESTIVAL_TITLE_SHORT') ?: 'Ølfestival';
+$devMode = getenv('DEV_MODE') === 'true';
 
 // Prepare PHP data for injection into JavaScript.
 $translationsJson = json_encode($translations);
@@ -499,6 +500,24 @@ $sessionId = $_SESSION['session_id'];
                 </div>
             </div>
         </div>
+        <script>
+            // Apply collapsed state immediately to avoid flash of expanded content
+            (function() {
+                try {
+                    var s = JSON.parse(localStorage.getItem('beerFestivalSettings'));
+                    var shouldCollapse = s ? s.filterSortCollapsed : true;
+                    if (shouldCollapse) {
+                        var el = document.getElementById('filter-sort-content');
+                        el.style.transition = 'none';
+                        el.classList.add('collapsed');
+                        document.querySelector('#filter-sort-header .toggle-icon').classList.add('rotated');
+                        // Force reflow then restore transitions
+                        el.offsetHeight;
+                        el.style.transition = '';
+                    }
+                } catch(e) {}
+            })();
+        </script>
 
         <!-- Search Section (non-collapsible) -->
         <div class="search-section mb-4">
@@ -1206,11 +1225,12 @@ $sessionId = $_SESSION['session_id'];
             });
         });
     </script>
+    <?php if (!$devMode): ?>
     <script>
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
             let newWorker;
-            
+
             function showUpdateBar() {
                 const banner = document.getElementById('update-banner');
                 if(banner) banner.classList.remove('hidden');
@@ -1242,6 +1262,16 @@ $sessionId = $_SESSION['session_id'];
             }
         }
     </script>
+    <?php else: ?>
+    <script>
+        // DEV_MODE: Unregister any existing service worker to avoid stale caches
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                registrations.forEach(reg => reg.unregister());
+            });
+        }
+    </script>
+    <?php endif; ?>
 </body>
 </html>
 <?php

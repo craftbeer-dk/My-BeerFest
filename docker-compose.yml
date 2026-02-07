@@ -33,6 +33,7 @@ services:
       FESTIVAL_INFO_TEXT: "Welcome to Lorem Ipsum Festival 2025"
       ENABLE_STATISTICS_LOGGING: true
       CONTACT_EMAIL: "lorem@example.com"
+      DEV_MODE: true
     networks:
       - beer_festival_network
     command: sh -c "mkdir -p /var/log/mybeerfest && chown -R www-data:www-data /var/log/mybeerfest && php-fpm"
