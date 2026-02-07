@@ -1,0 +1,82 @@
+/*
+================================================================================
+|                                                                              |
+|                             Theme Configuration File                         |
+|                                                                              |
+| Here you can easily change the colors across the entire site.                |
+| First, define your base color palette, then assign those colors to           |
+| the specific component variables below.                                      |
+|                                                                              |
+================================================================================
+*/
+
+:root {
+    /*
+     * ===================================
+     * BASE COLOR PALETTE
+     * ===================================
+     * Define the main colors for the theme here. These are the "source"
+     * colors that are applied to the components below.
+     */
+    --palette-primary: #1e3a8a;         /* Main brand color (blue) */
+    --palette-background: #1a202c;      /* Main page background */
+    --palette-surface: #2d3748;         /* Component backgrounds (cards, sections) */
+    --palette-interactive: #1e40af;     /* Hover states and interactive borders */
+    --palette-text-primary: #e2e8f0;    /* Main text color */
+    --palette-text-secondary: #cbd5e1;  /* Lighter text for paragraphs */
+    --palette-link: #60a5fa;            /* Links (light blue) */
+    --palette-link-hover: #3b82f6;      /* Stronger blue for link hover */
+    --palette-button-primary: var(--palette-primary); /* Button color is the main brand color */
+    --palette-favorite-star: #4b5563;   /* Color for an unfavorited star icon */
+    --palette-favorite-star-active: #fbbf24; /* Color for a favorited star icon (gold) */
+
+
+    /*
+     * ===================================
+     * COMPONENT-SPECIFIC ASSIGNMENTS
+     * ===================================
+     * These variables are used directly in the CSS. They are assigned colors
+     * from the base palette above to create a uniform look and feel.
+     */
+
+    /* General page colors */
+    --background-color: var(--palette-background);
+    --text-color: var(--palette-text-primary);
+    --header-text-color: var(--palette-text-primary);
+
+    /* Cards & Sections (Unified) */
+    --card-background-color: var(--palette-surface);
+    --card-border-color: var(--palette-primary);
+    --card-heading-color: var(--palette-text-primary);
+    --card-paragraph-color: var(--palette-text-secondary);
+    --section-background-color: var(--palette-surface);
+    --section-border-color: var(--palette-primary);
+    --header-background-color: var(--palette-primary);
+    --header-hover-bg: var(--palette-interactive);
+
+    /* Form elements */
+    --label-color: var(--palette-text-primary);
+    --input-background-color: var(--palette-primary);
+    --input-border-color: var(--palette-interactive);
+    --input-text-color: var(--palette-text-primary);
+
+    /* Icons and links */
+    --icon-color: #9ca3af;
+    --icon-hover-color: #e5e7eb;
+    --link-color: var(--palette-link);
+    --link-hover-color: var(--palette-link-hover);
+    --icon-favorite-color: var(--palette-favorite-star);
+    --icon-favorite-active-color: var(--palette-favorite-star-active);
+
+    /* Buttons */
+    --button-primary-background-color: var(--palette-button-primary);
+    --button-primary-hover-bg: var(--palette-interactive);
+    --button-secondary-bg: #4b5563;
+    --button-secondary-hover-bg: #374151;
+    --button-success-bg: #059669;        /* Kept separate for distinct "success" state */
+
+    /* Specific elements */
+    --title-bg-color: var(--palette-surface);
+    --title-text-color: var(--palette-text-primary);
+    --divider-color: var(--palette-interactive);
+}
