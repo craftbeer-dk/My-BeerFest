@@ -10,7 +10,7 @@ A Progressive Web App for beer festival management. Users can browse, filter, se
 - **Statistics dashboards** — personal stats (`/my_stats.php`) and organizer stats (`/stats.php`, auth-protected)
 - **Admin panel** — manage beer catalog via `/admin.php` (auth-protected)
 - **PWA & offline** — installable, Service Worker caches app shell and data
-- **Multi-language** — Danish, English, Swedish, Norwegian, German, French, Polish, Czech
+- **Multi-language** — Danish, English, Swedish, Norwegian, German, French, Polish, Czech - Admin endpoints is only in English
 - **Privacy-first** — no database, no server sessions, server logging is opt-in only
 
 ## Quick Start
