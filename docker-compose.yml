@@ -53,7 +53,7 @@ services:
       UNTAPPD_RATE_COOLDOWN: 2
     networks:
       - beer_festival_network
-    command: sh -c "echo 'clear_env = no' >> /usr/local/etc/php-fpm.d/www.conf && mkdir -p /var/log/mybeerfest && chown -R www-data:www-data /var/log/mybeerfest && php-fpm"
+    command: sh -c "echo 'clear_env = no' >> /usr/local/etc/php-fpm.d/www.conf && mkdir -p /var/log/mybeerfest && chown -R www-data:www-data /var/log/mybeerfest && chown -R www-data:www-data /var/www/html/data && php-fpm"
 
 networks:
   beer_festival_network:
