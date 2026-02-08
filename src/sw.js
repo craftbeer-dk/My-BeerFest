@@ -1,6 +1,6 @@
 // Service Worker for PWA functionality (caching and offline support)
 
-const CACHE_NAME = 'beerfest-cache-v4'; // Increment cache version to force update
+const CACHE_NAME = 'beerfest-cache-v5'; // Increment cache version to force update
 // These are the core files that make up the app's "shell".
 const APP_SHELL_URLS = [
   '/',
@@ -58,12 +58,36 @@ self.addEventListener('message', event => {
 
 // Fetch event: triggered for every network request made by the page.
 self.addEventListener('fetch', event => {
+  // Only handle GET requests — let POST/PUT/DELETE go straight to network
+  if (event.request.method !== 'GET') return;
+
   const requestUrl = new URL(event.request.url);
 
-  // Let the browser handle stats pages directly (basic auth requires native handling)
+  // Let the browser handle auth-protected pages directly (basic auth requires native handling)
   if (requestUrl.pathname === '/stats.php' || requestUrl.pathname === '/stats' ||
       requestUrl.pathname === '/admin.php' || requestUrl.pathname === '/admin' ||
       requestUrl.pathname === '/admin_api.php' || requestUrl.pathname === '/admin_api') {
+    return;
+  }
+
+  // Strategy: Stale-While-Revalidate for Google Fonts (cached for offline support)
+  if (requestUrl.origin === 'https://fonts.googleapis.com' ||
+      requestUrl.origin === 'https://fonts.gstatic.com') {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(cache => {
+        return cache.match(event.request).then(cachedResponse => {
+          const networkFetch = fetch(event.request).then(networkResponse => {
+            cache.put(event.request, networkResponse.clone());
+            return networkResponse;
+          });
+          if (cachedResponse) {
+            networkFetch.catch(() => {});
+            return cachedResponse;
+          }
+          return networkFetch;
+        });
+      })
+    );
     return;
   }
 
@@ -88,13 +112,24 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Strategy: Cache First for all other requests (app shell, assets)
-  // This makes the app load instantly.
+  // Strategy: Stale-While-Revalidate for app shell and other assets.
+  // Serves instantly from cache, then refreshes in the background so the
+  // next visit always has up-to-date content without needing a SW version bump.
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return from cache, or fetch from network if not in cache.
-        return response || fetch(event.request);
-      })
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.match(event.request).then(cachedResponse => {
+        const networkFetch = fetch(event.request).then(networkResponse => {
+          cache.put(event.request, networkResponse.clone());
+          return networkResponse;
+        });
+        if (cachedResponse) {
+          // Serve from cache immediately, update in background
+          networkFetch.catch(() => {});
+          return cachedResponse;
+        }
+        // No cache hit — wait for network
+        return networkFetch;
+      });
+    })
   );
 });
