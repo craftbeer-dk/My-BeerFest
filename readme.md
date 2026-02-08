@@ -1,105 +1,124 @@
-# My Beerfest
+# My BeerFest
 
-This is a simple web application designed for a beer festival, allowing users to browse a list of beers, filter and sort them, rate them, and manage their personal ratings. The application is built with PHP for server-side logic and HTML/CSS/JavaScript for the frontend, with a focus on functionality and usability.
+A Progressive Web App for beer festival management. Users can browse, filter, search, and rate beers. Ratings are stored locally in the browser. Optional server-side statistics logging is consent-based and GDPR-compliant.
 
 ## Features
 
-* **Beer Listing:** Displays a list of beers fetched from a JSON object.
+- **Beer browser** — filter by style, brewery, country, session; sort by name, ABV, rating
+- **Personal ratings** — rate beers 0.25-5.0, stored in localStorage, export/import via shareable URL
+- **Favorites** — star beers to find them quickly
+- **Statistics dashboards** — personal stats (`/my_stats.php`) and organizer stats (`/stats.php`, auth-protected)
+- **Admin panel** — manage beer catalog via `/admin.php` (auth-protected)
+- **PWA & offline** — installable, Service Worker caches app shell and data
+- **Multi-language** — Danish, English, Swedish, Norwegian, German, French, Polish, Czech
+- **Privacy-first** — no database, no server sessions, server logging is opt-in only
 
-* **Filtering:** Filter beers by style, brewery, country, and session.
+## Quick Start
 
-* **Sorting:** Sort beers by name, alcohol percentage, global rating, and your personal rating (high to low, low to high).
+Requires Docker Engine and Docker Compose.
 
-* **User Ratings:** Users can rate beers from 0.25 to 5 in increments of 0.25. These ratings are stored locally in the browser's `localStorage`.
-
-* **Rating Management:** Filters to show only "My Rated Beers" or "Unrated Beers".
-
-* **Untappd Link:** Each beer card includes a link to its Untappd page.
-
-* **Rating Export/Import:** A feature to copy a shareable URL containing all your ratings, which can be used for backup or to import ratings on another device.
-
-* **Collapsible Sections:** Filter and sorting sections are collapsible, defaulting to collapsed on mobile for better usability.
-
-* **Persistent Settings:** Filter and sorting selections, along with their collapsed states, are saved in `localStorage` for a consistent user experience across sessions.
-
-* **Multi-language Support:** The application's display text can be configured via environment variables to switch between different languages (Danish, English, Swedish, Norwegian, German, French, Polish, Czech).
-
-## Configuration
-
-The application's behavior can be configured using environment variables.
-
-* `FESTIVAL_TITLE`: Sets the title displayed at the top of the application.
-  * *Example:* `FESTIVAL_TITLE="My Awesome Beer Fest"`
-
-* `BEER_DATA_URL`: The URL where the `beers.json` data can be fetched from.
-  * *Example (for Docker Compose):* `BEER_DATA_URL="http://nginx/data/beers.json"`
-
-* `FESTIVAL_INFO_TEXT`: A short, configurable text displayed in the information container at the bottom of the page.
-  * *Example:* `FESTIVAL_INFO_TEXT="Enjoy your time at the festival!"`
-
-* `APP_LANGUAGE`: Sets the language for the application's text. Supported values are `da` (Danish), `en` (English), `sv` (Swedish), `no` (Norwegian), `de` (German), `fr` (French), `pl` (Polish), `cs` (Czech).
-  * *Example:* `APP_LANGUAGE="en"`
-
-## Data Structure (beers.json)
-
-The `beers.json` file should be an array of beer objects, each with the following structure:
-
-```json
-[
-  {
-    "id": "unique-beer-id-1",
-    "name": "Super delight",
-    "brewery": "Almond brewery",
-    "alc": 8.5,
-    "style": "New England IPA",
-    "country": "Sweden",
-    "untappd": "[https://untappd.com/beer/525252](https://untappd.com/beer/525252)",
-    "rating": 4.2,
-    "session": "Friday"
-  },
-  {
-    "id": "unique-beer-id-2",
-    "name": "Hazy Wonder",
-    "brewery": "Cloudy Brews",
-    "alc": 6.8,
-    "style": "Hazy IPA",
-    "country": "USA",
-    "untappd": "[https://untappd.com/beer/123456](https://untappd.com/beer/123456)",
-    "rating": 4.5,
-    "session": "Saturday"
-  }
-]
-```
-Note: Each beer must have a unique id field.
-
-## Deployment with Docker Compose
-
-This application is designed for easy deployment using Docker Compose, which sets up an Nginx web server and a PHP-FPM application server. The beers.json file is served by the Nginx container itself.
-
-Prerequisites
-- Docker Engine and Docker Compose installed on your system.
-
-Deploy:
-```
+```bash
 docker compose up -d
 ```
 
-You can now access the application in your browser at http://127.0.0.1:8888
+App available at **http://127.0.0.1:8181**
+
+```bash
+docker compose down   # stop
+```
+
+## Configuration
+
+Environment variables are set in `docker-compose.yml`. Auth variables go on the `nginx` service, the rest on `php`:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `FESTIVAL_TITLE` | Full festival name | `Lorem Ipsum Festival 2025` |
+| `FESTIVAL_TITLE_SHORT` | Short name for PWA | `Ølfestival` |
+| `APP_LANGUAGE` | Language code (`da`, `en`, `sv`, `no`, `de`, `fr`, `pl`, `cs`) | `da` |
+| `DOMAIN` | CORS allowed origin | _(none — same-origin only)_ |
+| `ENABLE_STATISTICS_LOGGING` | Enable server-side rating/consent logs | `true` |
+| `ENABLE_MAINSTYLE_FILTERING` | Group beer styles by main category | `true` |
+| `FESTIVAL_INFO_TEXT` | Custom info text in the app | _(none)_ |
+| `CONTACT_EMAIL` | Email shown in privacy policy | _(none)_ |
+| `DEV_MODE` | Disable Service Worker for development | `false` |
+| `STATS_USER` / `STATS_PASSWORD` | Basic auth for `/stats.php` (nginx) | `stats` / `changeme` |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | Basic auth for `/admin.php` and `/admin_api.php` (nginx) | `admin` / `changeme` |
+
+## Beer Data Format
+
+The beer catalog lives in `src/data/beers.json`. Each beer needs a unique `id`:
+
+```json
+{
+  "id": "unique-id",
+  "name": "Beer Name",
+  "brewery": "Brewery Name",
+  "alc": 5.5,
+  "style": "IPA - New England",
+  "country": "Denmark",
+  "untappd": "https://untappd.com/b/beer/123456",
+  "rating": 4.2,
+  "session": "Friday"
+}
+```
+
+## Testing
+
+Run the automated smoke tests (requires the app to be running):
+
+```bash
+./tests/smoke_test.sh
+```
+
+This runs ~39 assertions covering page loads, API validation, auth gates, XSS escaping, and CSRF protection. Override defaults with env vars:
+
+```bash
+BASE_URL=http://localhost:8181 ADMIN_USER=admin ADMIN_PASS=changeme ./tests/smoke_test.sh
+```
+
+## Project Structure
+
+```
+src/                  # Application source (mounted into containers)
+  index.php           # Main app — beer browser & rater
+  stats.php           # Organizer statistics dashboard
+  admin.php           # Admin panel for beer catalog management
+  admin_api.php       # Admin REST API
+  log_rating.php      # POST API — log a beer rating
+  log_cookie_consent.php  # POST API — log consent choice
+  my_stats.php        # Personal statistics page
+  privacy-policy.php  # GDPR privacy policy
+  manifest.php        # PWA web manifest
+  sw.js               # Service Worker
+  data/               # beers.json, flags.json
+  lang/               # Translation files (.conf)
+  config/             # CSS theme files
+nginx/
+  nginx.conf          # Nginx config with auth and PHP-FPM proxy
+  entrypoint.sh       # Generates .htpasswd files from env vars
+tests/
+  smoke_test.sh       # Automated smoke & security tests
+docker-compose.yml
+Dockerfile            # Multi-stage: Node (Tailwind build) -> PHP-FPM
+```
+
+## Tech Stack
+
+- **Backend:** PHP 8.2 (FPM Alpine)
+- **Web Server:** Nginx (stable Alpine)
+- **Frontend:** Vanilla JS (ES6+), Tailwind CSS
+- **Containerization:** Docker Compose
+- **Data:** JSON files + localStorage + NDJSON server logs
+- **No database** — stateless by design
 
 ## License
 
 This project is licensed under the MIT License.
 
 **Special Commercial Use Clause:**
-While the MIT License generally permits commercial use and distribution, this application, "My BeerFest", is specifically intended for use by individual beer festival organizers for their *own* beer festival events.
+This application is intended for use by individual beer festival organizers for their own events.
 
-You are permitted to:
-* Use this application for your own commercial beer festival.
-* Modify the application for your own use.
-* Distribute modified or unmodified versions for non-commercial purposes (e.g., sharing with other hobbyists).
+You **may**: use it for your own festival, modify it, and share it non-commercially.
 
-You are **NOT** permitted to:
-* Sell, sublicense, or otherwise commercially redistribute this application (modified or unmodified) to *other* beer festival organizers or third parties for their use in separate commercial events.
-* Offer this application as a paid service to other beer festival organizers.
-
-For any use beyond the scope of your own beer festival, please contact the original author for a separate commercial license agreement.
+You may **not**: sell, sublicense, or offer it as a paid service to other festival organizers. Contact the original author for a separate commercial license.
