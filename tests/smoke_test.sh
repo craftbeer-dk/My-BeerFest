@@ -120,6 +120,13 @@ else
     fail "beers.json empty or invalid"
 fi
 
+assert_status "Backup beers JSON without auth returns 401" \
+    "$BASE_URL/data/beers-20000101_000000.json" 401
+
+assert_status "Backup beers JSON with admin auth passes auth" \
+    "$BASE_URL/data/beers-20000101_000000.json" 404 \
+    -u "$ADMIN_USER:$ADMIN_PASS"
+
 # ══════════════════════════════════════════════════════════════════════
 # 3. RATING ENDPOINT
 # ══════════════════════════════════════════════════════════════════════
