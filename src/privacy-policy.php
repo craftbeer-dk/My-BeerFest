@@ -45,7 +45,7 @@ $contactEmail = getenv('CONTACT_EMAIL') ?: 'contact@mybeerfest.com';
     <title><?php echo t('privacy_policy_title', 'Privacy Policy'); ?></title>
     
     <!-- External assets and theme configuration -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="dist/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="config/theme.css">
     

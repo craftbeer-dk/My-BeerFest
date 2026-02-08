@@ -60,7 +60,7 @@ $sessionId = $_SESSION['session_id'];
     <link rel="apple-touch-icon" href="images/icon-192.png">
     <link rel="apple-touch-icon" sizes="512x512" href="images/icon-512.png">
     
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="dist/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="config/theme.css">
     <style>

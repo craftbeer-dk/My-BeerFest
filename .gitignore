@@ -1,3 +1,5 @@
 logs/
 src/data/beers-*.json
+src/dist/
+node_modules/
 CLAUDE.md

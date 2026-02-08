@@ -2,21 +2,13 @@
 FROM node:alpine AS css-build
 WORKDIR /build
 
-# 1. Initialize and install Tailwind locally
-# Installing explicitly ensures npx uses the local version without downloading
-RUN npm init -y && npm install tailwindcss
+COPY package.json package-lock.json* ./
+RUN npm install
 
-# 2. Copy the configuration
 COPY tailwind.config.js .
+COPY src/ ./src/
 
-# 3. Copy the source folder contents
-# This copies input.css, index.php, etc. into the /build directory
-COPY src/ .
-
-# 4. Create output directory and build using npx
-# npx will automatically find the tailwindcss binary in node_modules
-RUN mkdir -p dist && \
-    npx tailwindcss -i ./input.css -o ./dist/style.css --minify
+RUN npx tailwindcss -i src/input.css -o dist/style.css --minify
 
 # Stage 2: Final PHP-FPM Image
 FROM php:8.2-fpm-alpine

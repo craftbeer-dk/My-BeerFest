@@ -1,11 +1,12 @@
 // Service Worker for PWA functionality (caching and offline support)
 
-const CACHE_NAME = 'beerfest-cache-v3'; // Increment cache version to force update
+const CACHE_NAME = 'beerfest-cache-v4'; // Increment cache version to force update
 // These are the core files that make up the app's "shell".
 const APP_SHELL_URLS = [
   '/',
   'index.php',
   'config/theme.css',
+  'dist/style.css',
   'manifest.php',
   'my_stats.php'
 ];

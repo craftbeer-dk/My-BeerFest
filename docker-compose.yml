@@ -1,5 +1,13 @@
 
 services:
+  tailwind:
+    image: node:alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm install && npm run build:css"
+    restart: "no"
+
   nginx:
     image: nginx:stable-alpine
     restart: unless-stopped
@@ -15,7 +23,10 @@ services:
       ADMIN_USER: "admin"
       ADMIN_PASSWORD: "changeme"
     depends_on:
-      - php
+      tailwind:
+        condition: service_completed_successfully
+      php:
+        condition: service_started
     networks:
       - beer_festival_network
     entrypoint: ["sh", "/entrypoint.sh"]
