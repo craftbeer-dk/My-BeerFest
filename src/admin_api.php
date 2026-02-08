@@ -7,16 +7,26 @@ header('Content-Type: application/json');
 // Admin API is same-origin only — no CORS headers are emitted.
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if ($origin !== '') {
-    // An Origin header is present, meaning this is a cross-origin request.
-    // Only allow it if it matches the configured DOMAIN.
-    $allowedOrigin = getenv('DOMAIN');
+    // An Origin header is present — verify it's same-origin or matches DOMAIN.
+    $host = $_SERVER['HTTP_HOST'] ?? '';
     $allowed = false;
-    if ($allowedOrigin) {
-        // Compare against both http and https variants of the configured domain
-        $allowed = ($origin === 'https://' . $allowedOrigin)
-                || ($origin === 'http://' . $allowedOrigin)
-                || ($origin === $allowedOrigin);
+
+    // Same-origin: Origin matches the Host header of this request
+    if ($host !== '') {
+        $allowed = ($origin === 'https://' . $host)
+                || ($origin === 'http://' . $host);
     }
+
+    // Also allow the explicitly configured DOMAIN
+    if (!$allowed) {
+        $allowedOrigin = getenv('DOMAIN');
+        if ($allowedOrigin) {
+            $allowed = ($origin === 'https://' . $allowedOrigin)
+                    || ($origin === 'http://' . $allowedOrigin)
+                    || ($origin === $allowedOrigin);
+        }
+    }
+
     if (!$allowed) {
         http_response_code(403);
         echo json_encode(['status' => 'error', 'message' => 'Cross-origin request denied']);
