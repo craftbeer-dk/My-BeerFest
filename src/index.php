@@ -558,7 +558,7 @@ $sessionId = $_SESSION['session_id'];
             <p class="text-sm mt-4">
                 &copy; <?php echo date("Y"); ?> My BeerFest. All rights reserved.
                 <br>
-                Source code on <a href="https://github.com/not_released_yet" target="_blank" class="untappd-link">GitHub</a>
+                Source code on <a href="https://github.com/craftbeer-dk/My-BeerFest" target="_blank" class="untappd-link">GitHub</a>
             </p>
         </div>
     </div>
