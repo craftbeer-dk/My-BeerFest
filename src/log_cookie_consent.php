@@ -4,14 +4,15 @@
 
 // Set the allowed origin based on an environment variable for better security.
 $allowedOrigin = getenv('DOMAIN');
-if ($allowedOrigin) {
+if ($allowedOrigin && preg_match('#^https?://#', $allowedOrigin)) {
     // Only allow requests from the specified domain.
     header("Access-Control-Allow-Origin: " . $allowedOrigin);
-} else {
-    // Fallback for development or if the variable is not set.
-    // In a production environment, it's strongly recommended to set the DOMAIN variable.
-    header("Access-Control-Allow-Origin: *");
+} elseif ($allowedOrigin) {
+    // DOMAIN is set but lacks a scheme — assume https.
+    header("Access-Control-Allow-Origin: https://" . $allowedOrigin);
 }
+// When DOMAIN is not set, no Access-Control-Allow-Origin header is emitted,
+// which restricts requests to same-origin only.
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -55,7 +56,7 @@ $data = json_decode($jsonInput, true);
 // Validate the incoming JSON data.
 if (json_last_error() !== JSON_ERROR_NONE || !isset($data['consent']) || !is_bool($data['consent'])) {
     http_response_code(400); // Bad Request
-    error_log("Invalid JSON or missing/invalid consent data in log_cookie_consent.php. Raw data: " . $jsonInput);
+    error_log("Invalid JSON or missing/invalid consent data in log_cookie_consent.php. Length: " . strlen($jsonInput));
     exit;
 }
 
@@ -89,7 +90,7 @@ $logString = json_encode($logEntry) . PHP_EOL;
 $logDir = dirname($logFilePath);
 if (!is_dir($logDir)) {
     // Attempt to create the directory recursively with appropriate permissions.
-    if (!mkdir($logDir, 0777, true)) {
+    if (!mkdir($logDir, 0750, true)) {
         error_log("Error: Could not create log directory: $logDir");
         // Do not send an error to the client, as this is a server-side issue.
     }

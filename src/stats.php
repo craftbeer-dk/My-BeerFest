@@ -433,13 +433,21 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             document.getElementById('r-users').textContent = data.engagement.unique_users;
             document.getElementById('r-beers').textContent = data.engagement.beers_with_ratings;
 
+            // HTML-escape helper to prevent XSS via innerHTML
+            const esc = (str) => {
+                if (str == null) return '';
+                const div = document.createElement('div');
+                div.appendChild(document.createTextNode(String(str)));
+                return div.innerHTML;
+            };
+
             // Highlights
             const fmt = (item, suffix) => {
                 if (!item) return 'N/A';
                 const score = item[suffix];
                 const scoreText = (suffix === 'avg') ? score.toFixed(2) + ' ★' : score + ' ratings';
-                const breweryLabel = item.brewery ? `<br><span class="text-xs font-normal opacity-70">${item.brewery}</span>` : '';
-                return `<span>${item.name} (${scoreText})${breweryLabel}</span>`;
+                const breweryLabel = item.brewery ? `<br><span class="text-xs font-normal opacity-70">${esc(item.brewery)}</span>` : '';
+                return `<span>${esc(item.name)} (${scoreText})${breweryLabel}</span>`;
             };
 
             document.getElementById('h-beer').innerHTML = fmt(data.highlights.highest_beer, 'avg');
@@ -456,8 +464,8 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             Object.values(data.top_beers).forEach(b => {
                 topTable.innerHTML += `
                     <tr class="border-b border-white/10 hover:bg-white/5">
-                        <td class="py-3 font-semibold">${b.name}</td>
-                        <td class="py-3 opacity-70">${b.brewery}</td>
+                        <td class="py-3 font-semibold">${esc(b.name)}</td>
+                        <td class="py-3 opacity-70">${esc(b.brewery)}</td>
                         <td class="py-3 text-center">${b.count}</td>
                         <td class="py-3 text-right font-bold text-palette-text-primary">${b.avg.toFixed(2)} ★</td>
                     </tr>`;
@@ -470,9 +478,9 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                 const timeStr = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 recentTable.innerHTML += `
                     <tr class="border-b border-white/10">
-                        <td class="py-2 text-xs opacity-60">${timeStr}</td>
-                        <td class="py-2 font-medium">${r.beer_name}</td>
-                        <td class="py-2 opacity-70">${r.brewery}</td>
+                        <td class="py-2 text-xs opacity-60">${esc(timeStr)}</td>
+                        <td class="py-2 font-medium">${esc(r.beer_name)}</td>
+                        <td class="py-2 opacity-70">${esc(r.brewery)}</td>
                         <td class="py-2 text-right font-bold">${r.rating.toFixed(2)}</td>
                     </tr>`;
             });

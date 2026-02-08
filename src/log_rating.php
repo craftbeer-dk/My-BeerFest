@@ -5,14 +5,15 @@
 // In a production environment, you might want to restrict this to specific origins
 // Set the allowed origin based on an environment variable for better security.
 $allowedOrigin = getenv('DOMAIN');
-if ($allowedOrigin) {
+if ($allowedOrigin && preg_match('#^https?://#', $allowedOrigin)) {
     // Only allow requests from the specified domain.
     header("Access-Control-Allow-Origin: " . $allowedOrigin);
-} else {
-    // Fallback for development or if the variable is not set.
-    // In a production environment, it's strongly recommended to set the DOMAIN variable.
-    header("Access-Control-Allow-Origin: *");
+} elseif ($allowedOrigin) {
+    // DOMAIN is set but lacks a scheme — assume https.
+    header("Access-Control-Allow-Origin: https://" . $allowedOrigin);
 }
+// When DOMAIN is not set, no Access-Control-Allow-Origin header is emitted,
+// which restricts requests to same-origin only.
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -63,9 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Check if JSON decoding was successful and data is valid
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
-        error_log("Error: Invalid JSON data received in log_rating.php. Raw data: " . $json_data);
+        error_log("Error: Invalid JSON data received in log_rating.php. Length: " . strlen($json_data));
+        http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'Invalid JSON data received']);
-        http_response_code(400); // Bad Request
         exit();
     }
 
@@ -74,9 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate and sanitize beer_id (from client)
     $beerId = $data['beer_id'] ?? '';
     if (!is_string($beerId) || empty($beerId)) {
-        error_log("Validation Error: Missing or invalid beer_id from client. Data: " . json_encode($data));
-        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid beer ID']);
+        error_log("Validation Error: Missing or invalid beer_id from client.");
         http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid beer ID']);
         exit();
     }
     $beerId = strip_tags(trim($beerId)); // Sanitize string
@@ -84,9 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate rating
     $rating = $data['rating'] ?? null;
     if (!is_numeric($rating) || $rating < 0.25 || $rating > 5.0) {
-        error_log("Validation Error: Missing or invalid rating. Data: " . json_encode($data));
-        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid rating value (must be between 0.25 and 5.0)']);
+        error_log("Validation Error: Missing or invalid rating.");
         http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid rating value (must be between 0.25 and 5.0)']);
         exit();
     }
     $rating = (float) $rating; // Ensure it's a float
@@ -94,9 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate and sanitize session_id
     $sessionId = $data['session_id'] ?? '';
     if (!is_string($sessionId) || empty($sessionId)) {
-        error_log("Validation Error: Missing or invalid session_id. Data: " . json_encode($data));
-        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid session ID']);
+        error_log("Validation Error: Missing or invalid session_id.");
         http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid session ID']);
         exit();
     }
     $sessionId = strip_tags(trim($sessionId)); // Sanitize string
@@ -170,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $logDir = dirname($logFilePath);
         if (!is_dir($logDir)) {
             // Attempt to create directory with permissions
-            if (!mkdir($logDir, 0777, true)) {
+            if (!mkdir($logDir, 0750, true)) {
                 error_log("Error: Could not create log directory: $logDir");
                 // Continue execution, but logging will fail
             }
@@ -187,11 +188,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Send a success response back to the client
-    echo json_encode(['status' => 'success', 'message' => 'Rating processed.']);
     http_response_code(200);
+    echo json_encode(['status' => 'success', 'message' => 'Rating processed.']);
 } else {
     // Method Not Allowed
-    echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
     http_response_code(405);
+    echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
 }
 ?>

@@ -635,7 +635,19 @@ $sessionId = $_SESSION['session_id'];
             const filterSortToggleIcon = filterSortHeader.querySelector('.toggle-icon');
 
             // --- Functions (full definitions) ---
-            
+
+            // Security helpers: escape for HTML attributes and sanitize URLs
+            function escAttr(str) {
+                if (str == null) return '';
+                return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+            function safeUrl(url) {
+                if (typeof url !== 'string') return '#';
+                const trimmed = url.trim();
+                if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) return trimmed;
+                return '#';
+            }
+
             function saveState() {
                 const settings = {
                     search: searchInput.value,
@@ -936,7 +948,7 @@ $sessionId = $_SESSION['session_id'];
                     const flagEmoji = countryFlags[beer.country.toLowerCase()] || '';
 
                     beerCard.innerHTML = `
-                        <svg class="favorite-star ${isFavorited ? 'favorited' : ''}" data-beer-id="${beer.id}" title="Favorite" viewBox="0 0 24 24">
+                        <svg class="favorite-star ${isFavorited ? 'favorited' : ''}" data-beer-id="${escAttr(beer.id)}" title="Favorite" viewBox="0 0 24 24">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                         </svg>
                         <h2></h2>
@@ -944,11 +956,11 @@ $sessionId = $_SESSION['session_id'];
                         <p><strong>${translations['style'] ?? 'Style'}:</strong> <span class="style-text"></span></p>
                         <p><strong>${translations['session'] ?? 'Session'}:</strong> <span class="session-text"></span></p>
                         <div class="beer-actions-container">
-                            <a href="${beer.untappd}" target="_blank" class="untappd-button">
+                            <a href="${escAttr(safeUrl(beer.untappd))}" target="_blank" class="untappd-button">
                                 <div class="untappd-logo"></div>
                                 <span class="global-rating-text"></span>
                             </a>
-                            <select class="rating-select" data-beer-id="${beer.id}" data-beer-name="${beer.name}">
+                            <select class="rating-select" data-beer-id="${escAttr(beer.id)}" data-beer-name="${escAttr(beer.name)}">
                                 <option value="">${ratingPlaceholder}</option>
                                 ${generateRatingOptions(userRating)}
                             </select>

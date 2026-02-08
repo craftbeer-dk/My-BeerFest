@@ -3,17 +3,30 @@
 
 header('Content-Type: application/json');
 
-$allowedOrigin = getenv('DOMAIN');
-if ($allowedOrigin) {
-    header("Access-Control-Allow-Origin: " . $allowedOrigin);
-} else {
-    header("Access-Control-Allow-Origin: *");
+// CSRF protection: reject cross-origin requests.
+// Admin API is same-origin only — no CORS headers are emitted.
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($origin !== '') {
+    // An Origin header is present, meaning this is a cross-origin request.
+    // Only allow it if it matches the configured DOMAIN.
+    $allowedOrigin = getenv('DOMAIN');
+    $allowed = false;
+    if ($allowedOrigin) {
+        // Compare against both http and https variants of the configured domain
+        $allowed = ($origin === 'https://' . $allowedOrigin)
+                || ($origin === 'http://' . $allowedOrigin)
+                || ($origin === $allowedOrigin);
+    }
+    if (!$allowed) {
+        http_response_code(403);
+        echo json_encode(['status' => 'error', 'message' => 'Cross-origin request denied']);
+        exit();
+    }
 }
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+    // No CORS headers — preflight will fail for cross-origin requests
+    http_response_code(403);
     exit();
 }
 
