@@ -34,6 +34,9 @@ switch ($action) {
     case 'restore':
         handleRestore($beersFile, $dataDir);
         break;
+    case 'untappd_lookup':
+        handleUntappdLookup();
+        break;
     default:
         http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'Unknown action']);
@@ -49,8 +52,10 @@ function getBeerFieldRules() {
         'country'  => ['type' => 'string', 'required' => false, 'max_length' => 100],
         'session'  => ['type' => 'string', 'required' => false, 'max_length' => 100],
         'alc'      => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 100],
-        'rating'   => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 5],
-        'untappd'  => ['type' => 'url',    'required' => false, 'max_length' => 500],
+        'rating'      => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 5],
+        'untappd'     => ['type' => 'url',    'required' => false, 'max_length' => 500],
+        'last_lookup' => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 9999999999],
+        'last_update' => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 9999999999],
     ];
 }
 
@@ -373,5 +378,434 @@ function handleRestore($beersFile, $dataDir) {
         'backup' => isset($backupFile) ? basename($backupFile) : null,
         'beer_count' => count($restoreData)
     ]);
+}
+// --- Untappd Lookup ---
+
+// SSRF protection: only allow requests to https://untappd.com
+function validateUntappdUrl($url) {
+    if (!is_string($url) || empty($url)) return false;
+    if (!filter_var($url, FILTER_VALIDATE_URL)) return false;
+
+    $parsed = parse_url($url);
+    if ($parsed === false) return false;
+
+    // HTTPS only
+    if (($parsed['scheme'] ?? '') !== 'https') return false;
+
+    // Host must be exactly untappd.com (prevents untappd.com.evil.com etc.)
+    if (($parsed['host'] ?? '') !== 'untappd.com') return false;
+
+    // No userinfo (user:pass@untappd.com)
+    if (isset($parsed['user']) || isset($parsed['pass'])) return false;
+
+    // No port override
+    if (isset($parsed['port'])) return false;
+
+    return true;
+}
+
+function handleUntappdLookup() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
+        return;
+    }
+
+    $jsonData = file_get_contents('php://input');
+    if (strlen($jsonData) > 100 * 1024) {
+        http_response_code(413);
+        echo json_encode(['status' => 'error', 'message' => 'Payload too large']);
+        return;
+    }
+
+    $input = json_decode($jsonData, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($input) || $input !== array_values($input)) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Invalid JSON: expected an array']);
+        return;
+    }
+
+    // Limit to 50 beers per request to avoid long-running requests
+    if (count($input) > 50) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Max 50 beers per lookup request']);
+        return;
+    }
+
+    // Load beer data from server-side source (never trust client for this)
+    $beersFile = '/var/www/html/data/beers.json';
+    $beersData = [];
+    if (file_exists($beersFile)) {
+        $beersData = json_decode(file_get_contents($beersFile), true) ?: [];
+    }
+    $beersById = [];
+    foreach ($beersData as $beer) {
+        if (isset($beer['id'])) {
+            $beersById[$beer['id']] = $beer;
+        }
+    }
+
+    $results = [];
+    $lookedUpIds = [];
+    foreach ($input as $i => $item) {
+        if (!is_array($item)) {
+            $results[] = ['id' => '', 'found' => false, 'error' => 'Invalid item'];
+            continue;
+        }
+
+        // Only accept 'id' and optional 'manual_url' from the client
+        $id = $item['id'] ?? '';
+        if (!is_string($id) || empty($id) || !preg_match('/^[a-zA-Z0-9_-]+$/', $id)) {
+            $results[] = ['id' => $id, 'found' => false, 'error' => 'Invalid beer ID'];
+            continue;
+        }
+
+        // Look up beer in server-side data
+        if (!isset($beersById[$id])) {
+            $results[] = ['id' => $id, 'found' => false, 'error' => 'Beer not found'];
+            continue;
+        }
+
+        $beer = $beersById[$id];
+        $name = trim($beer['name'] ?? '');
+        $brewery = trim($beer['brewery'] ?? '');
+        $currentRating = $beer['rating'] ?? null;
+
+        if (empty($name)) {
+            $results[] = ['id' => $id, 'found' => false, 'error' => 'Beer has no name'];
+            continue;
+        }
+
+        // Determine the Untappd URL: client can supply a manual_url (validated), else use the beer's existing one
+        $untappdUrl = '';
+        $manualUrl = trim($item['manual_url'] ?? '');
+        if (!empty($manualUrl)) {
+            if (!validateUntappdUrl($manualUrl) || !preg_match('#^https://untappd\.com/b/#', $manualUrl)) {
+                $results[] = ['id' => $id, 'found' => false, 'error' => 'Invalid Untappd URL (must be https://untappd.com/b/...)'];
+                continue;
+            }
+            $untappdUrl = $manualUrl;
+        } else {
+            $untappdUrl = trim($beer['untappd'] ?? '');
+        }
+
+        if (!empty($untappdUrl) && validateUntappdUrl($untappdUrl) && preg_match('#^https://untappd\.com/b/#', $untappdUrl)) {
+            // Path A: Has Untappd URL — fetch detail page
+            $result = lookupByDetailPage($untappdUrl, $id, $currentRating);
+        } else {
+            // Path B: No URL — search Untappd
+            $result = lookupBySearch($name, $brewery, $id, $currentRating);
+        }
+
+        $results[] = $result;
+        $lookedUpIds[] = $id;
+    }
+
+    // Write last_lookup timestamps directly to beers.json (not a user-facing change)
+    if (!empty($lookedUpIds)) {
+        $now = time();
+        $dirty = false;
+        foreach ($beersData as &$b) {
+            if (in_array($b['id'] ?? '', $lookedUpIds, true)) {
+                $b['last_lookup'] = $now;
+                $dirty = true;
+            }
+        }
+        unset($b);
+        if ($dirty) {
+            file_put_contents(
+                $beersFile,
+                json_encode($beersData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                LOCK_EX
+            );
+        }
+    }
+
+    echo json_encode(['status' => 'success', 'results' => $results]);
+}
+
+// Rate limiter: pauses 10s after every 5 outbound fetches within a 30s window.
+// Uses a temp file to track timestamps across requests.
+function throttleUntappdRequest() {
+    $rateFile = '/tmp/mybeerfest_untappd_rate.json';
+    $now = microtime(true);
+    $window = (int)(getenv('UNTAPPD_RATE_WINDOW') ?: 30);
+    $maxInWindow = (int)(getenv('UNTAPPD_RATE_MAX') ?: 5);
+    $cooldown = (int)(getenv('UNTAPPD_RATE_COOLDOWN') ?: 10);
+
+    $timestamps = [];
+    if (file_exists($rateFile)) {
+        $raw = file_get_contents($rateFile);
+        $data = json_decode($raw, true);
+        if (is_array($data)) {
+            // Keep only timestamps within the window
+            $timestamps = array_values(array_filter($data, function ($t) use ($now, $window) {
+                return ($now - $t) < $window;
+            }));
+        }
+    }
+
+    if (count($timestamps) >= $maxInWindow) {
+        sleep($cooldown);
+        $timestamps = []; // Reset after cooldown
+    }
+
+    $timestamps[] = $now;
+    file_put_contents($rateFile, json_encode($timestamps), LOCK_EX);
+}
+
+function fetchUntappdPage($url) {
+    // Validate URL before fetching (defense in depth — callers should also validate)
+    if (!validateUntappdUrl($url)) {
+        return null;
+    }
+
+    // Enforce rate limit before every outbound fetch
+    throttleUntappdRequest();
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,  // Allow redirects (Untappd often 301s on slug changes)
+        CURLOPT_MAXREDIRS => 3,          // Limit redirect chain length
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        CURLOPT_HTTPHEADER => ['Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'],
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS, // Only allow HTTPS protocol
+        CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS, // Redirects must also be HTTPS
+    ]);
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $effectiveUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || $html === false) {
+        return null;
+    }
+
+    // SSRF check: verify the final URL after redirects still points to untappd.com
+    if (!validateUntappdUrl($effectiveUrl)) {
+        return null;
+    }
+
+    return ['html' => $html, 'effective_url' => $effectiveUrl];
+}
+
+function parseDetailPage($html) {
+    // Extract JSON-LD structured data
+    if (!preg_match('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/s', $html, $match)) {
+        return null;
+    }
+
+    $data = json_decode($match[1], true);
+    if (!is_array($data)) {
+        return null;
+    }
+
+    $result = ['name' => null, 'rating' => null];
+
+    if (isset($data['name'])) {
+        $result['name'] = $data['name'];
+    }
+
+    if (isset($data['aggregateRating']['ratingValue'])) {
+        $result['rating'] = round((float) $data['aggregateRating']['ratingValue'], 2);
+    }
+
+    return $result;
+}
+
+function parseSearchResults($html) {
+    $results = [];
+
+    // Match each beer-item block. Use a lookahead to stop at the next beer-item or end markers.
+    preg_match_all('/<div class="beer-item\s*">(.*?)(?=<div class="beer-item|<div class="results-list-top|<div class="add-beer|<\/div>\s*<\/div>\s*<\/div>\s*$)/s', $html, $blocks);
+
+    foreach ($blocks[1] as $block) {
+        $entry = ['name' => '', 'brewery' => '', 'url' => '', 'rating' => null, 'style' => '', 'abv' => null];
+
+        if (preg_match('/<p class="name"><a href="([^"]+)">([^<]+)<\/a>/', $block, $m)) {
+            $entry['url'] = 'https://untappd.com' . $m[1];
+            $entry['name'] = html_entity_decode(trim($m[2]), ENT_QUOTES, 'UTF-8');
+        }
+
+        if (preg_match('/<p class="brewery"><a[^>]*>([^<]+)<\/a>/', $block, $m)) {
+            $entry['brewery'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
+        }
+
+        if (preg_match('/data-rating="([^"]+)"/', $block, $m)) {
+            $entry['rating'] = round((float) $m[1], 2);
+        }
+
+        if (preg_match('/<p class="style">([^<]+)<\/p>/', $block, $m)) {
+            $entry['style'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
+        }
+
+        if (preg_match('/<p class="abv">\s*([\d.]+)%/', $block, $m)) {
+            $entry['abv'] = (float) $m[1];
+        }
+
+        if (!empty($entry['name'])) {
+            $results[] = $entry;
+        }
+    }
+
+    return $results;
+}
+
+function normalizeString($str) {
+    $str = mb_strtolower($str, 'UTF-8');
+    // Transliterate common accented chars
+    $str = strtr($str, [
+        'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'ß' => 'ss',
+        'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+        'à' => 'a', 'è' => 'e', 'ì' => 'i', 'ò' => 'o', 'ù' => 'u',
+        'â' => 'a', 'ê' => 'e', 'î' => 'i', 'ô' => 'o', 'û' => 'u',
+        'ø' => 'o', 'å' => 'a', 'æ' => 'ae',
+        'ñ' => 'n', 'ç' => 'c', 'ð' => 'd', 'þ' => 'th',
+    ]);
+    // Remove non-alphanumeric
+    $str = preg_replace('/[^a-z0-9\s]/', '', $str);
+    // Collapse whitespace
+    $str = preg_replace('/\s+/', ' ', trim($str));
+    return $str;
+}
+
+function matchScore($searchName, $searchBrewery, $resultName, $resultBrewery) {
+    $sn = normalizeString($searchName);
+    $rn = normalizeString($resultName);
+    $sb = normalizeString($searchBrewery);
+    $rb = normalizeString($resultBrewery);
+
+    // Name similarity (60% weight)
+    similar_text($sn, $rn, $namePercent);
+
+    // Brewery similarity (40% weight)
+    $breweryPercent = 0;
+    if (!empty($sb) && !empty($rb)) {
+        similar_text($sb, $rb, $breweryPercent);
+    } elseif (empty($sb) && empty($rb)) {
+        $breweryPercent = 100;
+    }
+
+    return round($namePercent * 0.6 + $breweryPercent * 0.4);
+}
+
+function lookupByDetailPage($untappdUrl, $beerId, $currentRating) {
+    $fetch = fetchUntappdPage($untappdUrl);
+    if ($fetch === null) {
+        return [
+            'id' => $beerId,
+            'lookup_type' => 'detail',
+            'found' => false,
+            'error' => 'Failed to fetch Untappd page',
+            'untappd_url' => $untappdUrl,
+        ];
+    }
+
+    $parsed = parseDetailPage($fetch['html']);
+    if ($parsed === null || $parsed['rating'] === null) {
+        return [
+            'id' => $beerId,
+            'lookup_type' => 'detail',
+            'found' => false,
+            'error' => 'Could not parse rating from page',
+            'untappd_url' => $untappdUrl,
+        ];
+    }
+
+    $ratingChanged = ($currentRating === null || round((float) $currentRating, 2) !== $parsed['rating']);
+
+    $result = [
+        'id' => $beerId,
+        'lookup_type' => 'detail',
+        'found' => true,
+        'untappd_url' => $untappdUrl,
+        'untappd_rating' => $parsed['rating'],
+        'untappd_name' => $parsed['name'],
+        'confidence' => 100,
+        'current_rating' => $currentRating,
+        'rating_changed' => $ratingChanged,
+    ];
+
+    // Flag when Untappd redirected to a different canonical URL
+    $resolvedUrl = $fetch['effective_url'];
+    if ($resolvedUrl !== $untappdUrl) {
+        $result['redirected_url'] = $resolvedUrl;
+    }
+
+    return $result;
+}
+
+function lookupBySearch($name, $brewery, $beerId, $currentRating) {
+    $query = $name;
+    if (!empty($brewery)) {
+        $query .= ' ' . $brewery;
+    }
+
+    $searchUrl = 'https://untappd.com/search?q=' . urlencode($query) . '&type=beer&sort=all';
+    $fetch = fetchUntappdPage($searchUrl);
+
+    if ($fetch === null) {
+        return [
+            'id' => $beerId,
+            'lookup_type' => 'search',
+            'found' => false,
+            'error' => 'Failed to fetch search results',
+            'search_url' => $searchUrl,
+        ];
+    }
+
+    $searchResults = parseSearchResults($fetch['html']);
+
+    if (empty($searchResults)) {
+        return [
+            'id' => $beerId,
+            'lookup_type' => 'search',
+            'found' => false,
+            'error' => 'No results found',
+            'search_url' => $searchUrl,
+        ];
+    }
+
+    // Score each result and find the best match
+    $bestScore = 0;
+    $bestMatch = null;
+    foreach ($searchResults as $sr) {
+        $score = matchScore($name, $brewery, $sr['name'], $sr['brewery']);
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $bestMatch = $sr;
+        }
+    }
+
+    if ($bestMatch === null) {
+        return [
+            'id' => $beerId,
+            'lookup_type' => 'search',
+            'found' => false,
+            'error' => 'No matching results',
+            'search_url' => $searchUrl,
+        ];
+    }
+
+    $ratingChanged = ($currentRating === null || round((float) $currentRating, 2) !== $bestMatch['rating']);
+
+    return [
+        'id' => $beerId,
+        'lookup_type' => 'search',
+        'found' => true,
+        'untappd_url' => $bestMatch['url'],
+        'untappd_rating' => $bestMatch['rating'],
+        'untappd_name' => $bestMatch['name'],
+        'untappd_brewery' => $bestMatch['brewery'],
+        'untappd_style' => $bestMatch['style'],
+        'confidence' => $bestScore,
+        'current_rating' => $currentRating,
+        'rating_changed' => $ratingChanged,
+        'search_url' => $searchUrl,
+    ];
 }
 ?>

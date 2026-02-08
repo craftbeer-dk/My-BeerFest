@@ -482,6 +482,171 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             background-color: #ef4444;
         }
 
+        /* Untappd lookup */
+        .btn-untappd {
+            background: #f5a623;
+            color: #1a1a1a;
+            font-weight: 700;
+        }
+        .btn-untappd:hover {
+            background: #e09500;
+        }
+        .lookup-progress {
+            padding: 1rem;
+            text-align: center;
+            color: var(--card-paragraph-color);
+        }
+        .lookup-progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--palette-interactive);
+            border-radius: 3px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        .lookup-progress-fill {
+            height: 100%;
+            background: var(--palette-text-primary);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        .lookup-result-item {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--divider-color);
+            font-size: 0.8125rem;
+        }
+        .lookup-result-item:last-child {
+            border-bottom: none;
+        }
+        .lookup-result-info {
+            flex: 1;
+            min-width: 200px;
+        }
+        .lookup-result-beer {
+            font-weight: 600;
+            color: var(--card-heading-color);
+        }
+        .lookup-result-meta {
+            font-size: 0.75rem;
+            color: var(--card-paragraph-color);
+            margin-top: 0.125rem;
+        }
+        .lookup-result-values {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .lookup-value-box {
+            text-align: center;
+            min-width: 60px;
+        }
+        .lookup-value-label {
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--card-paragraph-color);
+        }
+        .lookup-value-num {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--card-heading-color);
+        }
+        .lookup-arrow {
+            color: var(--card-paragraph-color);
+            font-size: 1rem;
+        }
+        .confidence-high { color: #6ee7b7; }
+        .confidence-medium { color: #fcd34d; }
+        .confidence-low { color: #fca5a5; }
+        .lookup-result-actions {
+            display: flex;
+            gap: 0.375rem;
+            align-items: center;
+        }
+        .lookup-manual-input {
+            display: flex;
+            gap: 0.375rem;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+        .lookup-manual-input input {
+            flex: 1;
+            padding: 0.375rem 0.5rem;
+            border: 1px solid var(--input-border-color);
+            border-radius: 0.25rem;
+            background-color: var(--input-background-color);
+            color: var(--input-text-color);
+            font-size: 0.75rem;
+        }
+        .lookup-accepted {
+            opacity: 0.5;
+        }
+        .lookup-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .lookup-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 100;
+            margin-top: 0.25rem;
+            min-width: 220px;
+            background: var(--palette-primary);
+            border: 1px solid var(--card-border-color);
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .lookup-dropdown-menu.open {
+            display: block;
+        }
+        .lookup-dropdown-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.625rem 1rem;
+            background: none;
+            border: none;
+            color: var(--card-paragraph-color);
+            font-size: 0.8125rem;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        .lookup-dropdown-menu button:hover {
+            background: var(--palette-interactive);
+            color: var(--palette-text-primary);
+        }
+        .lookup-dropdown-menu .menu-hint {
+            font-size: 0.6875rem;
+            color: var(--card-paragraph-color);
+            opacity: 0.7;
+        }
+        .lookup-status-badge {
+            font-size: 0.6875rem;
+            font-weight: 700;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+        }
+        .badge-accepted {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+        .badge-declined {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+        .badge-nochange {
+            background: rgba(203, 213, 225, 0.15);
+            color: var(--card-paragraph-color);
+        }
+
         @media (max-width: 768px) {
             .form-grid {
                 grid-template-columns: 1fr;
@@ -512,6 +677,14 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         <div class="admin-toolbar">
             <button id="btn-save-all" class="btn btn-success" disabled onclick="saveAllChanges()">Save All Changes</button>
             <button class="btn btn-primary" onclick="showAddModal()">+ Add Beer</button>
+            <div class="lookup-dropdown" id="lookup-dropdown">
+                <button class="btn btn-untappd" onclick="window._admin.toggleLookupMenu(event)">Lookup Ratings &#9662;</button>
+                <div class="lookup-dropdown-menu" id="lookup-dropdown-menu">
+                    <button onclick="window._admin.bulkLookup('all')">All Beers</button>
+                    <button onclick="window._admin.bulkLookup('not-recent')">Not checked in 12h<br><span class="menu-hint" id="lookup-hint-not-recent"></span></button>
+                    <button onclick="window._admin.bulkLookup('missing-url')">Missing Untappd URL<br><span class="menu-hint" id="lookup-hint-missing-url"></span></button>
+                </div>
+            </div>
             <span id="changes-badge" class="changes-badge">0 changes</span>
             <div style="flex:1"></div>
             <input type="text" id="search-input" class="search-input" placeholder="Search beers..." oninput="handleSearch()">
@@ -577,6 +750,21 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 <button class="btn-small btn-ghost" onclick="closeDiffModal()">&times;</button>
             </div>
             <div id="diff-content"></div>
+        </div>
+    </div>
+
+    <!-- Untappd Lookup Review Modal -->
+    <div id="lookup-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="width:1100px;">
+            <div class="modal-header">
+                <span class="modal-title" id="lookup-modal-title">Untappd Lookup</span>
+                <button class="btn-small btn-ghost" onclick="window._admin.closeLookupModal()">&times;</button>
+            </div>
+            <div id="lookup-modal-toolbar" style="display:none; margin-bottom:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-success btn-small" onclick="window._admin.acceptAllHigh()">Accept All High Confidence</button>
+                <button class="btn btn-ghost btn-small" onclick="window._admin.closeLookupModal()">Done</button>
+            </div>
+            <div id="lookup-content"></div>
         </div>
     </div>
 
@@ -654,6 +842,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 '<td>' + esc(beer.session || '') + '</td>' +
                 '<td><div class="actions-cell">' +
                     '<button class="btn-small btn-primary" onclick="window._admin.startEdit(\'' + esc(beer.id) + '\')">Edit</button>' +
+                    '<button class="btn-small btn-untappd" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT</button>' +
                     '<button class="btn-small btn-secondary" onclick="window._admin.deleteBeer(\'' + esc(beer.id) + '\')">Del</button>' +
                 '</div></td>' +
             '</tr>';
@@ -1155,10 +1344,349 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                    ' ' + ts.substring(9, 11) + ':' + ts.substring(11, 13) + ':' + ts.substring(13, 15);
         }
 
+        function timeAgo(unixTs) {
+            var diff = Math.floor(Date.now() / 1000) - unixTs;
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
         function formatBytes(bytes) {
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
             return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        // --- Untappd Lookup ---
+        var lookupBatchSize = <?php echo (int)(getenv('UNTAPPD_RATE_MAX') ?: 5); ?>;
+        var lookupResults = []; // Stored results for the current review session
+
+        function singleLookup(beerId) {
+            var beer = currentBeers.find(function(b) { return b.id === beerId; });
+            if (!beer) return;
+            runLookup([{ id: beerId }]);
+        }
+
+        function toggleLookupMenu(e) {
+            e.stopPropagation();
+            var menu = document.getElementById('lookup-dropdown-menu');
+            var isOpen = menu.classList.contains('open');
+            menu.classList.toggle('open');
+            if (!isOpen) {
+                // Update hints with counts
+                var twelveHoursAgo = Math.floor(Date.now() / 1000) - (12 * 3600);
+                var notRecent = currentBeers.filter(function(b) { return !b.last_lookup || b.last_lookup < twelveHoursAgo; }).length;
+                var missingUrl = currentBeers.filter(function(b) { return !b.untappd; }).length;
+                document.getElementById('lookup-hint-not-recent').textContent = notRecent + ' of ' + currentBeers.length + ' beers';
+                document.getElementById('lookup-hint-missing-url').textContent = missingUrl + ' of ' + currentBeers.length + ' beers';
+            }
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            var menu = document.getElementById('lookup-dropdown-menu');
+            if (menu && !e.target.closest('.lookup-dropdown')) {
+                menu.classList.remove('open');
+            }
+        });
+
+        function bulkLookup(filter) {
+            document.getElementById('lookup-dropdown-menu').classList.remove('open');
+
+            var queue;
+            if (filter === 'not-recent') {
+                var twelveHoursAgo = Math.floor(Date.now() / 1000) - (12 * 3600);
+                queue = currentBeers.filter(function(b) { return !b.last_lookup || b.last_lookup < twelveHoursAgo; });
+            } else if (filter === 'missing-url') {
+                queue = currentBeers.filter(function(b) { return !b.untappd; });
+            } else {
+                queue = currentBeers.slice();
+            }
+
+            if (queue.length === 0) {
+                showToast('No beers match this filter', 'error');
+                return;
+            }
+
+            openLookupModal();
+            showLookupProgress(0, queue.length);
+            lookupResults = [];
+            var batchSize = lookupBatchSize;
+
+            function processBatch(startIdx) {
+                if (startIdx >= queue.length) {
+                    renderLookupResults();
+                    return;
+                }
+                var batch = queue.slice(startIdx, startIdx + batchSize);
+                var payload = batch.map(function(b) {
+                    return { id: b.id };
+                });
+
+                fetch('admin_api.php?action=untappd_lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.status === 'success' && data.results) {
+                        lookupResults = lookupResults.concat(data.results);
+                        stampLastLookup(data.results);
+                    }
+                    showLookupProgress(Math.min(startIdx + batchSize, queue.length), queue.length);
+                    processBatch(startIdx + batchSize);
+                })
+                .catch(function(err) {
+                    showToast('Lookup error: ' + err.message, 'error');
+                    renderLookupResults();
+                });
+            }
+
+            processBatch(0);
+        }
+
+        // Sync last_lookup from server into both current and original (no unsaved-change trigger)
+        function stampLastLookup(results) {
+            var now = Math.floor(Date.now() / 1000);
+            results.forEach(function(r) {
+                var ci = currentBeers.findIndex(function(b) { return b.id === r.id; });
+                if (ci >= 0) currentBeers[ci].last_lookup = now;
+                var oi = originalBeers.findIndex(function(b) { return b.id === r.id; });
+                if (oi >= 0) originalBeers[oi].last_lookup = now;
+            });
+        }
+
+        function runLookup(items) {
+            openLookupModal();
+            showLookupProgress(0, items.length);
+            lookupResults = [];
+
+            fetch('admin_api.php?action=untappd_lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(items)
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === 'success' && data.results) {
+                    lookupResults = data.results;
+                    stampLastLookup(data.results);
+                }
+                renderLookupResults();
+            })
+            .catch(function(err) {
+                document.getElementById('lookup-content').innerHTML =
+                    '<p style="color:#ef4444; padding:1rem;">Lookup failed: ' + esc(err.message) + '</p>';
+            });
+        }
+
+        function openLookupModal() {
+            document.getElementById('lookup-modal').classList.remove('hidden');
+            document.getElementById('lookup-modal-toolbar').style.display = 'none';
+        }
+
+        function closeLookupModal() {
+            document.getElementById('lookup-modal').classList.add('hidden');
+        }
+
+        function showLookupProgress(current, total) {
+            var pct = total > 0 ? Math.round((current / total) * 100) : 0;
+            document.getElementById('lookup-content').innerHTML =
+                '<div class="lookup-progress">' +
+                    '<p>Looking up beer ' + current + ' of ' + total + '...</p>' +
+                    '<div class="lookup-progress-bar"><div class="lookup-progress-fill" style="width:' + pct + '%"></div></div>' +
+                '</div>';
+        }
+
+        function renderLookupResults() {
+            document.getElementById('lookup-modal-toolbar').style.display = 'flex';
+            var container = document.getElementById('lookup-content');
+
+            if (lookupResults.length === 0) {
+                container.innerHTML = '<p style="color:var(--card-paragraph-color); padding:1rem; text-align:center;">No results</p>';
+                return;
+            }
+
+            // Sort: actionable items first (found + changed or redirect), then no-change, then not-found
+            lookupResults.sort(function(a, b) {
+                var actionA = a.found && (a.rating_changed || a.redirected_url) ? 0 : (a.found ? 1 : 2);
+                var actionB = b.found && (b.rating_changed || b.redirected_url) ? 0 : (b.found ? 1 : 2);
+                return actionA - actionB;
+            });
+
+            // Stats summary
+            var foundChanged = lookupResults.filter(function(r) { return r.found && r.rating_changed; }).length;
+            var foundRedirect = lookupResults.filter(function(r) { return r.found && !r.rating_changed && r.redirected_url; }).length;
+            var foundSame = lookupResults.filter(function(r) { return r.found && !r.rating_changed && !r.redirected_url; }).length;
+            var notFound = lookupResults.filter(function(r) { return !r.found; }).length;
+
+            var html = '<div class="diff-summary" style="margin-bottom:0.75rem;">' +
+                '<strong>' + foundChanged + '</strong> with updated ratings, ' +
+                (foundRedirect > 0 ? '<strong>' + foundRedirect + '</strong> with redirected URLs, ' : '') +
+                '<strong>' + foundSame + '</strong> unchanged, ' +
+                '<strong>' + notFound + '</strong> not found' +
+                '</div>';
+
+            for (var i = 0; i < lookupResults.length; i++) {
+                var r = lookupResults[i];
+                var beer = currentBeers.find(function(b) { return b.id === r.id; });
+                var beerName = beer ? (beer.name || r.id) : r.id;
+                var beerBrewery = beer ? (beer.brewery || '') : '';
+
+                html += '<div class="lookup-result-item" id="lookup-row-' + esc(r.id) + '">';
+                html += '<div class="lookup-result-info">';
+                html += '<div class="lookup-result-beer">' + esc(beerName) + '</div>';
+                html += '<div class="lookup-result-meta">' + esc(beerBrewery);
+                if (r.untappd_name) {
+                    html += ' &rarr; Untappd: ' + esc(r.untappd_name);
+                    if (r.untappd_brewery) html += ' by ' + esc(r.untappd_brewery);
+                }
+                if (beer && beer.last_lookup) {
+                    html += ' &middot; Checked ' + timeAgo(beer.last_lookup);
+                }
+                if (beer && beer.last_update) {
+                    html += ' &middot; Updated ' + timeAgo(beer.last_update);
+                }
+                html += '</div>';
+                html += '</div>';
+
+                if (r.found) {
+                    // Confidence badge
+                    var confClass = r.confidence >= 80 ? 'confidence-high' : (r.confidence >= 50 ? 'confidence-medium' : 'confidence-low');
+                    html += '<div class="lookup-result-values">';
+                    html += '<div class="lookup-value-box"><div class="lookup-value-label">Current</div><div class="lookup-value-num">' + (r.current_rating != null ? r.current_rating : '—') + '</div></div>';
+                    html += '<span class="lookup-arrow">&rarr;</span>';
+                    html += '<div class="lookup-value-box"><div class="lookup-value-label">Untappd</div><div class="lookup-value-num">' + r.untappd_rating + '</div></div>';
+                    html += '<div class="lookup-value-box"><div class="lookup-value-label">Match</div><div class="lookup-value-num ' + confClass + '">' + r.confidence + '%</div></div>';
+                    html += '</div>';
+
+                    // Show redirect notice when URL changed
+                    if (r.redirected_url) {
+                        html += '<div style="font-size:0.7rem; color:var(--palette-text-primary); margin:0.25rem 0; word-break:break-all;">' +
+                            '&#8618; URL redirected to: <a href="' + esc(r.redirected_url) + '" target="_blank" style="color:var(--link-color);">' + esc(r.redirected_url) + '</a>' +
+                            '</div>';
+                    }
+
+                    var hasChanges = r.rating_changed || r.redirected_url;
+                    if (hasChanges) {
+                        html += '<div class="lookup-result-actions" id="lookup-actions-' + esc(r.id) + '">' +
+                            '<button class="btn-small btn-success" onclick="window._admin.acceptLookup(\'' + esc(r.id) + '\', ' + i + ')">Accept</button>' +
+                            '<button class="btn-small btn-ghost" onclick="window._admin.declineLookup(\'' + esc(r.id) + '\', ' + i + ')">Decline</button>' +
+                            '</div>';
+                    } else {
+                        html += '<span class="lookup-status-badge badge-nochange">No change</span>';
+                    }
+                } else {
+                    // Not found — show search link and manual input
+                    html += '<div style="flex:1; min-width:200px;">';
+                    if (r.search_url) {
+                        html += '<a href="' + esc(r.search_url) + '" target="_blank" style="color:var(--link-color); font-size:0.75rem;">Search on Untappd &nearr;</a>';
+                    }
+                    html += '<div class="lookup-manual-input">' +
+                        '<input type="url" placeholder="Paste Untappd URL..." id="manual-url-' + esc(r.id) + '">' +
+                        '<button class="btn-small btn-untappd" onclick="window._admin.manualFetch(\'' + esc(r.id) + '\')">Fetch</button>' +
+                        '</div>';
+                    html += '</div>';
+                    html += '<span class="lookup-status-badge" style="background:rgba(239,68,68,0.15); color:#fca5a5;">Not found</span>';
+                }
+
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        function acceptLookup(beerId, resultIdx) {
+            var r = lookupResults[resultIdx];
+            if (!r) return;
+
+            var beerIdx = currentBeers.findIndex(function(b) { return b.id === beerId; });
+            if (beerIdx < 0) return;
+
+            // Update the beer data
+            if (r.untappd_rating != null) {
+                currentBeers[beerIdx].rating = r.untappd_rating;
+            }
+            // Prefer the canonical (redirected) URL if available
+            var urlToStore = r.redirected_url || r.untappd_url;
+            if (urlToStore) {
+                currentBeers[beerIdx].untappd = urlToStore;
+            }
+            currentBeers[beerIdx].last_update = Math.floor(Date.now() / 1000);
+
+            // Mark as modified
+            if (!modifiedIds[beerId]) {
+                modifiedIds[beerId] = 'modified';
+            }
+
+            // Update the row UI
+            var actions = document.getElementById('lookup-actions-' + beerId);
+            if (actions) {
+                actions.innerHTML = '<span class="lookup-status-badge badge-accepted">Accepted</span>';
+            }
+            var row = document.getElementById('lookup-row-' + beerId);
+            if (row) row.classList.add('lookup-accepted');
+
+            renderTable();
+        }
+
+        function declineLookup(beerId, resultIdx) {
+            var actions = document.getElementById('lookup-actions-' + beerId);
+            if (actions) {
+                actions.innerHTML = '<span class="lookup-status-badge badge-declined">Declined</span>';
+            }
+            var row = document.getElementById('lookup-row-' + beerId);
+            if (row) row.classList.add('lookup-accepted');
+        }
+
+        function acceptAllHigh() {
+            for (var i = 0; i < lookupResults.length; i++) {
+                var r = lookupResults[i];
+                if (r.found && (r.rating_changed || r.redirected_url) && r.confidence >= 80) {
+                    acceptLookup(r.id, i);
+                }
+            }
+            showToast('Accepted all high-confidence matches');
+        }
+
+        function manualFetch(beerId) {
+            var input = document.getElementById('manual-url-' + beerId);
+            if (!input) return;
+            var url = input.value.trim();
+            if (!url || !url.match(/^https:\/\/untappd\.com\/b\//)) {
+                showToast('Please enter a valid Untappd beer URL (https://untappd.com/b/...)', 'error');
+                return;
+            }
+
+            input.disabled = true;
+            fetch('admin_api.php?action=untappd_lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify([{ id: beerId, manual_url: url }])
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                input.disabled = false;
+                if (data.status === 'success' && data.results && data.results[0]) {
+                    var r = data.results[0];
+                    // Replace the result in our array
+                    var idx = lookupResults.findIndex(function(lr) { return lr.id === beerId; });
+                    if (idx >= 0) {
+                        lookupResults[idx] = r;
+                    } else {
+                        lookupResults.push(r);
+                    }
+                    renderLookupResults();
+                } else {
+                    showToast('Could not fetch rating from that URL', 'error');
+                }
+            })
+            .catch(function(err) {
+                input.disabled = false;
+                showToast('Fetch error: ' + err.message, 'error');
+            });
         }
 
         // Expose functions to onclick handlers
@@ -1169,7 +1697,15 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             handleEditKey: handleEditKey,
             deleteBeer: deleteBeer,
             showDiff: showDiff,
-            restoreVersion: restoreVersion
+            restoreVersion: restoreVersion,
+            singleLookup: singleLookup,
+            toggleLookupMenu: toggleLookupMenu,
+            bulkLookup: bulkLookup,
+            closeLookupModal: closeLookupModal,
+            acceptLookup: acceptLookup,
+            declineLookup: declineLookup,
+            acceptAllHigh: acceptAllHigh,
+            manualFetch: manualFetch
         };
         window.showAddModal = showAddModal;
         window.closeAddModal = closeAddModal;
