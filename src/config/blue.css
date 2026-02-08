@@ -18,17 +18,17 @@
      * Define the main colors for the theme here. These are the "source"
      * colors that are applied to the components below.
      */
-    --palette-primary: #1e3a8a;         /* Main brand color (blue) */
-    --palette-background: #1a202c;      /* Main page background */
-    --palette-surface: #2d3748;         /* Component backgrounds (cards, sections) */
-    --palette-interactive: #1e40af;     /* Hover states and interactive borders */
-    --palette-text-primary: #e2e8f0;    /* Main text color */
+    --palette-primary: #1B3A5C;         /* Main brand color (deep navy) */
+    --palette-background: #1B3A5C;      /* Main page background */
+    --palette-surface: #265580;         /* Component backgrounds (medium blue) */
+    --palette-interactive: #142D49;     /* Hover states and interactive borders */
+    --palette-text-primary: #E8C547;    /* Main text color (warm gold) */
     --palette-text-secondary: #cbd5e1;  /* Lighter text for paragraphs */
-    --palette-link: #60a5fa;            /* Links (light blue) */
-    --palette-link-hover: #3b82f6;      /* Stronger blue for link hover */
+    --palette-link: #7dd3fc;            /* Links (sky blue) */
+    --palette-link-hover: #38bdf8;      /* Stronger blue for link hover */
     --palette-button-primary: var(--palette-primary); /* Button color is the main brand color */
-    --palette-favorite-star: #4b5563;   /* Color for an unfavorited star icon */
-    --palette-favorite-star-active: #fbbf24; /* Color for a favorited star icon (gold) */
+    --palette-favorite-star: #cbd5e1;   /* Color for an unfavorited star icon */
+    --palette-favorite-star-active: #E8C547; /* Color for a favorited star icon (gold) */
 
 
     /*
@@ -71,8 +71,8 @@
     /* Buttons */
     --button-primary-background-color: var(--palette-button-primary);
     --button-primary-hover-bg: var(--palette-interactive);
-    --button-secondary-bg: #4b5563;
-    --button-secondary-hover-bg: #374151;
+    --button-secondary-bg: #C05A41;
+    --button-secondary-hover-bg: #A94D38;
     --button-success-bg: #059669;        /* Kept separate for distinct "success" state */
 
     /* Specific elements */
