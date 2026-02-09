@@ -17,6 +17,14 @@ A Progressive Web App for beer festival management. Users can browse, filter, se
 
 Requires Docker Engine and Docker Compose.
 
+1. Copy the example environment file and adjust the values:
+
+```bash
+cp .env.example .env
+```
+
+2. Start the app:
+
 ```bash
 docker compose up -d
 ```
@@ -29,7 +37,7 @@ docker compose down   # stop
 
 ## Configuration
 
-Environment variables are set in `docker-compose.yml`. Auth variables go on the `nginx` service, the rest on `php`:
+Environment variables are defined in a `.env` file in the project root (see `.env.example` for a template). Docker Compose reads this file automatically. Auth variables are passed to the `nginx` service, the rest to `php`:
 
 | Variable | Purpose | Default |
 |---|---|---|

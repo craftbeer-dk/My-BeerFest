@@ -1,3 +1,4 @@
+.env
 logs/
 src/data/beers-*.json
 src/dist/
