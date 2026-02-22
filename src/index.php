@@ -936,7 +936,7 @@ $sessionId = $_SESSION['session_id'];
                 beersToRender.forEach(beer => {
                     const beerCard = document.createElement('div');
                     beerCard.className = 'beer-card';
-                    const userRating = userRatings[beer.id] || '';
+                    const userRating = userRatings[beer.id] !== undefined ? userRatings[beer.id] : '';
                     const isFavorited = userFavorites[beer.id];
                     let displayedStyle = beer.style;
                     if (enableMainstyleFiltering) {
@@ -989,6 +989,9 @@ $sessionId = $_SESSION['session_id'];
                     const selected = (parseFloat(currentRating) === parseFloat(value)) ? 'selected' : '';
                     optionsHtml += `<option value="${value}" ${selected}>${value}</option>`;
                 }
+                const noRatingLabel = translations['no_rating'] ?? 'No rating';
+                const noRatingSelected = (currentRating === 0) ? 'selected' : '';
+                optionsHtml += `<option value="0" ${noRatingSelected}>${noRatingLabel}</option>`;
                 return optionsHtml;
             }
 

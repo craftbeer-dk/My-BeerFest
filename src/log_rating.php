@@ -82,12 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $beerId = strip_tags(trim($beerId)); // Sanitize string
 
-    // Validate rating
+    // Validate rating (0 = "no rating" / tasted without score)
     $rating = $data['rating'] ?? null;
-    if (!is_numeric($rating) || $rating < 0.25 || $rating > 5.0) {
+    if (!is_numeric($rating) || $rating < 0 || ($rating > 0 && $rating < 0.25) || $rating > 5.0) {
         error_log("Validation Error: Missing or invalid rating.");
         http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid rating value (must be between 0.25 and 5.0)']);
+        echo json_encode(['status' => 'error', 'message' => 'Missing or invalid rating value (must be 0 or between 0.25 and 5.0)']);
         exit();
     }
     $rating = (float) $rating; // Ensure it's a float

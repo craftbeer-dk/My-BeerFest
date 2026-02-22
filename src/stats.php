@@ -129,15 +129,19 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '') {
             if (!isset($beerAgg[$bid])) {
                 $beerAgg[$bid] = array('name' => $data['beer_name'], 'brewery' => $brewery, 'ratings' => array(), 'count' => 0);
             }
-            $beerAgg[$bid]['ratings'][] = $rating;
+            if ($rating > 0) {
+                $beerAgg[$bid]['ratings'][] = $rating;
+            }
             $beerAgg[$bid]['count']++;
 
             if (!isset($brewAgg[$brewery])) {
                 $brewAgg[$brewery] = array('name' => $brewery, 'ratings' => array(), 'count' => 0);
             }
-            $brewAgg[$brewery]['ratings'][] = $rating;
+            if ($rating > 0) {
+                $brewAgg[$brewery]['ratings'][] = $rating;
+            }
             $brewAgg[$brewery]['count']++;
-            
+
             $stats['engagement']['total_ratings']++;
         }
     }
@@ -147,7 +151,9 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '') {
     // 4. Mean Calculation and Sorting
     $processList = function($list) {
         foreach ($list as $key => &$val) {
-            $val['avg'] = array_sum($val['ratings']) / count($val['ratings']);
+            $val['avg'] = count($val['ratings']) > 0
+                ? array_sum($val['ratings']) / count($val['ratings'])
+                : 0;
         }
         
         $byAvg = $list;
@@ -481,7 +487,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                         <td class="py-2 text-xs opacity-60">${esc(timeStr)}</td>
                         <td class="py-2 font-medium">${esc(r.beer_name)}</td>
                         <td class="py-2 opacity-70">${esc(r.brewery)}</td>
-                        <td class="py-2 text-right font-bold">${r.rating.toFixed(2)}</td>
+                        <td class="py-2 text-right font-bold">${r.rating > 0 ? r.rating.toFixed(2) : 'No rating'}</td>
                     </tr>`;
             });
         }

@@ -239,8 +239,10 @@ $translationsJson = json_encode($translations);
                     const countRated = ratedIds.length;
                     const countFavorites = Object.keys(userFavorites).length;
                     const ratingsArray = Object.values(userRatings);
-                    const sumRatings = ratingsArray.reduce((a, b) => a + b, 0);
-                    const avgRating = (sumRatings / countRated).toFixed(2);
+                    const scoredRatings = ratingsArray.filter(r => r > 0);
+                    const avgRating = scoredRatings.length > 0
+                        ? (scoredRatings.reduce((a, b) => a + b, 0) / scoredRatings.length).toFixed(2)
+                        : '—';
 
                     // 2. Calculate Brewery Stats
                     const festivalBreweries = new Set(allBeers.map(b => b.brewery));
@@ -257,18 +259,20 @@ $translationsJson = json_encode($translations);
                     document.getElementById('stat-breweries-tried').textContent = triedBreweries.size;
                     document.getElementById('stat-breweries-total').textContent = festivalBreweries.size;
 
-                    // 4. Find Extremes
-                    const maxRating = Math.max(...ratingsArray);
-                    const minRating = Math.min(...ratingsArray);
-
+                    // 4. Find Extremes (only scored ratings, excluding "no rating")
                     const highestBeers = [];
                     const lowestBeers = [];
 
-                    allBeers.forEach(beer => {
-                        const score = userRatings[beer.id];
-                        if (score === maxRating) highestBeers.push({...beer, userScore: score});
-                        if (score === minRating) lowestBeers.push({...beer, userScore: score});
-                    });
+                    if (scoredRatings.length > 0) {
+                        const maxRating = Math.max(...scoredRatings);
+                        const minRating = Math.min(...scoredRatings);
+
+                        allBeers.forEach(beer => {
+                            const score = userRatings[beer.id];
+                            if (score > 0 && score === maxRating) highestBeers.push({...beer, userScore: score});
+                            if (score > 0 && score === minRating) lowestBeers.push({...beer, userScore: score});
+                        });
+                    }
 
                     // 5. Render Lists
                     renderBeerList('highest-beers-list', highestBeers);
