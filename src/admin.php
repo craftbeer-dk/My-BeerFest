@@ -703,6 +703,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                             <th>Rating</th>
                             <th>Country</th>
                             <th>Session</th>
+                            <th>Note</th>
                             <th style="min-width:120px">Actions</th>
                         </tr>
                     </thead>
@@ -789,6 +790,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             { key: 'rating', label: 'Rating', type: 'number', step: '0.01' },
             { key: 'country', label: 'Country', type: 'text' },
             { key: 'session', label: 'Session', type: 'text' },
+            { key: 'note', label: 'Note', type: 'text' },
             { key: 'untappd', label: 'Untappd URL', type: 'url' }
         ];
 
@@ -811,7 +813,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             var filtered = getFilteredBeers();
 
             if (filtered.length === 0) {
-                html = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--card-paragraph-color);">No beers found</td></tr>';
+                html = '<tr><td colspan="9" style="text-align:center; padding:2rem; color:var(--card-paragraph-color);">No beers found</td></tr>';
             }
 
             for (var i = 0; i < filtered.length; i++) {
@@ -840,6 +842,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 '<td>' + esc(beer.rating != null ? beer.rating : '') + '</td>' +
                 '<td>' + esc(beer.country || '') + '</td>' +
                 '<td>' + esc(beer.session || '') + '</td>' +
+                '<td title="' + esc(beer.note || '') + '">' + esc(beer.note || '') + '</td>' +
                 '<td><div class="actions-cell">' +
                     '<button class="btn-small btn-primary" onclick="window._admin.startEdit(\'' + esc(beer.id) + '\')">Edit</button>' +
                     '<button class="btn-small btn-untappd" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT</button>' +
@@ -873,7 +876,8 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                        (b.style && b.style.toLowerCase().indexOf(term) >= 0) ||
                        (b.id && b.id.toLowerCase().indexOf(term) >= 0) ||
                        (b.country && b.country.toLowerCase().indexOf(term) >= 0) ||
-                       (b.session && b.session.toLowerCase().indexOf(term) >= 0);
+                       (b.session && b.session.toLowerCase().indexOf(term) >= 0) ||
+                       (b.note && b.note.toLowerCase().indexOf(term) >= 0);
             });
         }
 

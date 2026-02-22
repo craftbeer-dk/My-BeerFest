@@ -74,6 +74,7 @@ function getBeerFieldRules() {
         'style'    => ['type' => 'string', 'required' => false, 'max_length' => 200],
         'country'  => ['type' => 'string', 'required' => false, 'max_length' => 100],
         'session'  => ['type' => 'string', 'required' => false, 'max_length' => 100],
+        'note'     => ['type' => 'string', 'required' => false, 'max_length' => 200],
         'alc'      => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 100],
         'rating'      => ['type' => 'number', 'required' => false, 'min' => 0, 'max' => 5],
         'untappd'     => ['type' => 'url',    'required' => false, 'max_length' => 500],

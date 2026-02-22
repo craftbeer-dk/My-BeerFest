@@ -100,6 +100,14 @@ $sessionId = $_SESSION['session_id'];
             line-height: 1.3;
             margin-bottom: 0.25rem;
         }
+        .beer-note {
+            font-size: 0.8rem;
+            font-style: italic;
+            color: var(--card-paragraph-color);
+            opacity: 0.85;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
         .favorite-star {
             position: absolute;
             top: 0.75rem;
@@ -190,7 +198,8 @@ $sessionId = $_SESSION['session_id'];
         .beer-actions-container {
             display: flex;
             gap: 0.5rem;
-            margin-top: 0.75rem;
+            margin-top: auto;
+            padding-top: 0.75rem;
         }
         .untappd-button, .rating-select {
             flex: 1;
@@ -955,6 +964,7 @@ $sessionId = $_SESSION['session_id'];
                         <p><strong>${translations['brewery'] ?? 'Brewery'}:</strong> <span class="brewery-text"></span></p>
                         <p><strong>${translations['style'] ?? 'Style'}:</strong> <span class="style-text"></span></p>
                         <p><strong>${translations['session'] ?? 'Session'}:</strong> <span class="session-text"></span></p>
+                        ${beer.note ? '<p class="beer-note"><span class="note-text"></span></p>' : ''}
                         <div class="beer-actions-container">
                             <a href="${escAttr(safeUrl(beer.untappd))}" target="_blank" class="untappd-button">
                                 <div class="untappd-logo"></div>
@@ -971,6 +981,8 @@ $sessionId = $_SESSION['session_id'];
                     beerCard.querySelector('.brewery-text').textContent = `${beer.brewery} ${flagEmoji}`;
                     beerCard.querySelector('.style-text').textContent = displayedStyle;
                     beerCard.querySelector('.session-text').textContent = beer.session !== undefined ? beer.session : 'N/A';
+                    const noteEl = beerCard.querySelector('.note-text');
+                    if (noteEl) noteEl.textContent = beer.note;
                     beerCard.querySelector('.global-rating-text').textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
                     
                     fragment.appendChild(beerCard);
