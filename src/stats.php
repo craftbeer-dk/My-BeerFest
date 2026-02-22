@@ -47,7 +47,7 @@ function t($key, $default = '') {
  * @param string $targetSession Optional session filter (e.g., 'Fredag').
  * @return array The calculated statistics object.
  */
-function calculateStats($ratingsPath, $consentPath, $targetSession = '') {
+function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = []) {
     $stats = array(
         'visitors' => array('total' => 0, 'yes' => 0, 'no' => 0),
         'engagement' => array('total_ratings' => 0, 'unique_users' => 0, 'beers_with_ratings' => 0),
@@ -103,6 +103,9 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '') {
 
             $bid = isset($entry['beer_id']) ? $entry['beer_id'] : 'unknown';
             $sid = isset($entry['session_id']) ? $entry['session_id'] : 'anon';
+
+            // Exclude flagged raters
+            if (!empty($excludedSessionIds) && in_array($sid, $excludedSessionIds, true)) continue;
             
             // Deduplicate: User's latest rating for a specific beer overwrites previous ones
             $deduplicatedRatings[$bid][$sid] = $entry;
@@ -188,14 +191,29 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '') {
 
 // --- Controller logic ---
 $filterSession = isset($_GET['session']) ? $_GET['session'] : '';
+$excludeRaters = isset($_GET['exclude_raters']) && $_GET['exclude_raters'] === '1';
+
+$excludedSessionIds = [];
+if ($excludeRaters) {
+    $excludedFile = '/var/www/html/data/excluded_raters.json';
+    if (file_exists($excludedFile)) {
+        $excludedData = json_decode(file_get_contents($excludedFile), true);
+        if (is_array($excludedData)) {
+            $excludedSessionIds = array_column($excludedData, 'session_id');
+        }
+    }
+}
 
 if (isset($_GET['format']) && $_GET['format'] === 'json') {
     header('Content-Type: application/json');
-    echo json_encode(calculateStats($ratingsLogPath, $consentLogPath, $filterSession));
+    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds);
+    $stats['exclude_raters_active'] = $excludeRaters;
+    $stats['excluded_count'] = count($excludedSessionIds);
+    echo json_encode($stats);
     exit;
 }
 
-$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession);
+$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds);
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Beerfest');
 ?>
 <!DOCTYPE html>
@@ -297,7 +315,11 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     </select>
                 </div>
 
-                <div class="flex items-center gap-4 md:ml-auto">
+                <div class="flex items-center gap-4 md:ml-auto flex-wrap">
+                    <label for="exclude-raters" class="inline-flex items-center gap-2 cursor-pointer text-sm" style="margin: 0;">
+                        <input type="checkbox" id="exclude-raters" class="w-4 h-4 rounded border-gray-300" onchange="refreshData()">
+                        <span>Exclude flagged raters</span>
+                    </label>
                     <label for="auto-reload" class="inline-flex items-center gap-2 cursor-pointer text-sm" style="margin: 0;">
                         <input type="checkbox" id="auto-reload" checked class="w-4 h-4 rounded border-gray-300">
                         <span>Auto-refresh (30s)</span>
@@ -413,7 +435,8 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
          */
         async function refreshData() {
             const session = document.getElementById('session-select').value;
-            const url = `stats.php?format=json&session=${encodeURIComponent(session)}`;
+            const excludeRaters = document.getElementById('exclude-raters').checked ? '1' : '0';
+            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}`;
 
             try {
                 const response = await fetch(url);
@@ -439,57 +462,80 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             document.getElementById('r-users').textContent = data.engagement.unique_users;
             document.getElementById('r-beers').textContent = data.engagement.beers_with_ratings;
 
-            // HTML-escape helper to prevent XSS via innerHTML
-            const esc = (str) => {
-                if (str == null) return '';
-                const div = document.createElement('div');
-                div.appendChild(document.createTextNode(String(str)));
-                return div.innerHTML;
+            // Highlights — safe DOM construction (no innerHTML with user data)
+            const setHighlight = (elId, item, suffix) => {
+                const el = document.getElementById(elId);
+                el.textContent = '';
+                if (!item) { el.textContent = 'N/A'; return; }
+                const score = Number(item[suffix]);
+                const scoreText = (suffix === 'avg') ? score.toFixed(2) + ' \u2605' : score + ' ratings';
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = (item.name || '') + ' (' + scoreText + ')';
+                el.appendChild(nameSpan);
+                if (item.brewery) {
+                    el.appendChild(document.createElement('br'));
+                    const brewSpan = document.createElement('span');
+                    brewSpan.className = 'text-xs font-normal opacity-70';
+                    brewSpan.textContent = item.brewery;
+                    el.appendChild(brewSpan);
+                }
             };
 
-            // Highlights
-            const fmt = (item, suffix) => {
-                if (!item) return 'N/A';
-                const score = item[suffix];
-                const scoreText = (suffix === 'avg') ? score.toFixed(2) + ' ★' : score + ' ratings';
-                const breweryLabel = item.brewery ? `<br><span class="text-xs font-normal opacity-70">${esc(item.brewery)}</span>` : '';
-                return `<span>${esc(item.name)} (${scoreText})${breweryLabel}</span>`;
-            };
+            setHighlight('h-beer', data.highlights.highest_beer, 'avg');
+            setHighlight('l-beer', data.highlights.lowest_beer, 'avg');
+            setHighlight('m-beer', data.highlights.most_rated_beer, 'count');
 
-            document.getElementById('h-beer').innerHTML = fmt(data.highlights.highest_beer, 'avg');
-            document.getElementById('l-beer').innerHTML = fmt(data.highlights.lowest_beer, 'avg');
-            document.getElementById('m-beer').innerHTML = fmt(data.highlights.most_rated_beer, 'count');
-            
-            document.getElementById('h-brew').innerHTML = fmt(data.highlights.highest_brewery, 'avg');
-            document.getElementById('l-brew').innerHTML = fmt(data.highlights.lowest_brewery, 'avg');
-            document.getElementById('m-brew').innerHTML = fmt(data.highlights.most_rated_brewery, 'count');
+            setHighlight('h-brew', data.highlights.highest_brewery, 'avg');
+            setHighlight('l-brew', data.highlights.lowest_brewery, 'avg');
+            setHighlight('m-brew', data.highlights.most_rated_brewery, 'count');
 
-            // Top Performers Table
+            // Top Performers Table — safe DOM construction
             const topTable = document.getElementById('top-table');
             topTable.innerHTML = '';
+            const topFrag = document.createDocumentFragment();
             Object.values(data.top_beers).forEach(b => {
-                topTable.innerHTML += `
-                    <tr class="border-b border-white/10 hover:bg-white/5">
-                        <td class="py-3 font-semibold">${esc(b.name)}</td>
-                        <td class="py-3 opacity-70">${esc(b.brewery)}</td>
-                        <td class="py-3 text-center">${b.count}</td>
-                        <td class="py-3 text-right font-bold text-palette-text-primary">${b.avg.toFixed(2)} ★</td>
-                    </tr>`;
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-white/10 hover:bg-white/5';
+                const cells = [
+                    ['py-3 font-semibold', b.name],
+                    ['py-3 opacity-70', b.brewery],
+                    ['py-3 text-center', String(Number(b.count))],
+                    ['py-3 text-right font-bold text-palette-text-primary', Number(b.avg).toFixed(2) + ' \u2605']
+                ];
+                cells.forEach(([cls, text]) => {
+                    const td = document.createElement('td');
+                    td.className = cls;
+                    td.textContent = text;
+                    tr.appendChild(td);
+                });
+                topFrag.appendChild(tr);
             });
+            topTable.appendChild(topFrag);
 
-            // Recent Activity Feed
+            // Recent Activity Feed — safe DOM construction
             const recentTable = document.getElementById('recent-table');
             recentTable.innerHTML = '';
+            const recentFrag = document.createDocumentFragment();
             data.recent_activity.forEach(r => {
                 const timeStr = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                recentTable.innerHTML += `
-                    <tr class="border-b border-white/10">
-                        <td class="py-2 text-xs opacity-60">${esc(timeStr)}</td>
-                        <td class="py-2 font-medium">${esc(r.beer_name)}</td>
-                        <td class="py-2 opacity-70">${esc(r.brewery)}</td>
-                        <td class="py-2 text-right font-bold">${r.rating > 0 ? r.rating.toFixed(2) : 'No rating'}</td>
-                    </tr>`;
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-white/10';
+                const rating = Number(r.rating);
+                const cells = [
+                    ['py-2 text-xs opacity-60', timeStr],
+                    ['py-2 font-medium', r.beer_name],
+                    ['py-2 opacity-70', r.brewery],
+                    ['py-2 text-right font-bold', rating > 0 ? rating.toFixed(2) : 'No rating']
+                ];
+                cells.forEach(([cls, text]) => {
+                    const td = document.createElement('td');
+                    td.className = cls;
+                    td.textContent = text;
+                    tr.appendChild(td);
+                });
+                recentFrag.appendChild(tr);
             });
+            recentTable.appendChild(recentFrag);
         }
 
         // Initialize display and set background refresh interval

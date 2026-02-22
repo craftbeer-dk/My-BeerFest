@@ -292,15 +292,26 @@ $translationsJson = json_encode($translations);
 
                 beers.sort((a, b) => a.name.localeCompare(b.name));
 
-                container.innerHTML = beers.map(beer => `
-                    <div class="beer-item">
-                        <div>
-                            <div class="font-semibold text-palette-text-primary">${beer.name}</div>
-                            <div class="text-xs opacity-70">${beer.brewery}</div>
-                        </div>
-                        <div class="font-bold text-lg">${beer.userScore.toFixed(2)}</div>
-                    </div>
-                `).join('');
+                container.innerHTML = '';
+                const frag = document.createDocumentFragment();
+                beers.forEach(beer => {
+                    const item = document.createElement('div');
+                    item.className = 'beer-item';
+                    const info = document.createElement('div');
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'font-semibold text-palette-text-primary';
+                    nameDiv.textContent = beer.name;
+                    const brewDiv = document.createElement('div');
+                    brewDiv.className = 'text-xs opacity-70';
+                    brewDiv.textContent = beer.brewery;
+                    info.append(nameDiv, brewDiv);
+                    const score = document.createElement('div');
+                    score.className = 'font-bold text-lg';
+                    score.textContent = beer.userScore.toFixed(2);
+                    item.append(info, score);
+                    frag.appendChild(item);
+                });
+                container.appendChild(frag);
             }
 
             initStats();

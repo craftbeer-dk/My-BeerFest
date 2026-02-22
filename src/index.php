@@ -774,7 +774,10 @@ $sessionId = $_SESSION['session_id'];
                     const sanitizedRatings = {};
                     for (const beerId in importedRatings) {
                         if (Object.prototype.hasOwnProperty.call(importedRatings, beerId) && validBeerIds.has(beerId)) {
-                            sanitizedRatings[beerId] = importedRatings[beerId];
+                            const rating = importedRatings[beerId];
+                            if (typeof rating === 'number' && isFinite(rating) && rating >= 0 && rating <= 5) {
+                                sanitizedRatings[beerId] = rating;
+                            }
                         }
                     }
                     localStorage.setItem('userRatings', JSON.stringify(sanitizedRatings));

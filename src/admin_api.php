@@ -40,8 +40,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+// CSRF: Require X-Requested-With header on mutation requests.
+// Browsers block cross-origin custom headers unless CORS preflight allows them,
+// and this API emits no CORS headers, so cross-origin POSTs cannot set this header.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $xrw = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+    if ($xrw !== 'XMLHttpRequest') {
+        http_response_code(403);
+        echo json_encode(['status' => 'error', 'message' => 'Forbidden: missing required header']);
+        exit();
+    }
+}
+
 $dataDir = '/var/www/html/data';
 $beersFile = $dataDir . '/beers.json';
+$excludedRatersFile = $dataDir . '/excluded_raters.json';
 $action = $_GET['action'] ?? '';
 
 switch ($action) {
@@ -59,6 +72,15 @@ switch ($action) {
         break;
     case 'untappd_lookup':
         handleUntappdLookup();
+        break;
+    case 'bad_raters':
+        handleBadRaters($excludedRatersFile);
+        break;
+    case 'exclude_rater':
+        handleExcludeRater($excludedRatersFile);
+        break;
+    case 'excluded_raters':
+        handleGetExcludedRaters($excludedRatersFile);
         break;
     default:
         http_response_code(400);
@@ -831,5 +853,105 @@ function lookupBySearch($name, $brewery, $beerId, $currentRating) {
         'rating_changed' => $ratingChanged,
         'search_url' => $searchUrl,
     ];
+}
+
+// ── Bad Rater Detection ─────────────────────────────────────────────
+
+function handleBadRaters($excludedRatersFile) {
+    require_once __DIR__ . '/bad_rater_engine.php';
+
+    $ratingsLogPath = '/var/log/mybeerfest/ratings.log';
+
+    if (!file_exists($ratingsLogPath)) {
+        echo json_encode([
+            'status'  => 'success',
+            'flagged' => new \stdClass(),
+            'summary' => [
+                'total_sessions_analyzed' => 0,
+                'total_flagged'           => 0,
+                'pattern_counts'          => new \stdClass(),
+            ],
+        ]);
+        return;
+    }
+
+    $results = detectBadRaters($ratingsLogPath);
+
+    // Merge exclusion status
+    $excluded    = loadExcludedRaters($excludedRatersFile);
+    $excludedIds = array_column($excluded, 'session_id');
+
+    foreach ($results['flagged'] as &$flagged) {
+        $flagged['excluded'] = in_array($flagged['session_id'], $excludedIds, true);
+    }
+    unset($flagged);
+
+    // Ensure empty objects serialise as {} not []
+    if (empty($results['flagged'])) {
+        $results['flagged'] = new \stdClass();
+    }
+    if (empty($results['summary']['pattern_counts'])) {
+        $results['summary']['pattern_counts'] = new \stdClass();
+    }
+
+    echo json_encode(['status' => 'success'] + $results);
+}
+
+function handleExcludeRater($excludedRatersFile) {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
+        return;
+    }
+
+    $input     = json_decode(file_get_contents('php://input'), true);
+    $sessionId = $input['session_id'] ?? '';
+    $exclude   = $input['exclude']    ?? true;
+    $patterns  = $input['patterns']   ?? [];
+
+    if (!is_string($sessionId) || $sessionId === '' || mb_strlen($sessionId) > 200) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Invalid session_id']);
+        return;
+    }
+
+    $excluded = loadExcludedRaters($excludedRatersFile);
+
+    if ($exclude) {
+        $existingIds = array_column($excluded, 'session_id');
+        if (!in_array($sessionId, $existingIds, true)) {
+            $excluded[] = [
+                'session_id'  => $sessionId,
+                'excluded_at' => gmdate('Y-m-d\TH:i:s\Z'),
+                'patterns'    => array_map('strval', array_slice((array) $patterns, 0, 10)),
+            ];
+        }
+    } else {
+        $excluded = array_values(array_filter($excluded, function ($e) use ($sessionId) {
+            return $e['session_id'] !== $sessionId;
+        }));
+    }
+
+    saveExcludedRaters($excludedRatersFile, $excluded);
+    echo json_encode(['status' => 'success', 'excluded_count' => count($excluded)]);
+}
+
+function handleGetExcludedRaters($excludedRatersFile) {
+    $excluded = loadExcludedRaters($excludedRatersFile);
+    echo json_encode(['status' => 'success', 'excluded' => $excluded]);
+}
+
+function loadExcludedRaters($filePath) {
+    if (!file_exists($filePath)) return [];
+    $data = json_decode(file_get_contents($filePath), true);
+    return is_array($data) ? $data : [];
+}
+
+function saveExcludedRaters($filePath, $data) {
+    file_put_contents(
+        $filePath,
+        json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+        LOCK_EX
+    );
 }
 ?>

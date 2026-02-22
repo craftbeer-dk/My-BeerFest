@@ -203,13 +203,12 @@ assert_status "Stats with auth returns 200" \
 
 STATS_FILE="$TMPDIR_TEST/stats.html"
 curl -s -u "$STATS_USER:$STATS_PASS" "$BASE_URL/stats.php" > "$STATS_FILE"
-assert_file_contains "XSS esc() helper present in stats" "$STATS_FILE" "const esc ="
-assert_file_contains "esc() used on beer name in highlights" "$STATS_FILE" 'esc(item.name)'
-assert_file_contains "esc() used on brewery in highlights" "$STATS_FILE" 'esc(item.brewery)'
-assert_file_contains "esc() used on top beer name" "$STATS_FILE" 'esc(b.name)'
-assert_file_contains "esc() used on top brewery" "$STATS_FILE" 'esc(b.brewery)'
-assert_file_contains "esc() used on recent beer_name" "$STATS_FILE" 'esc(r.beer_name)'
-assert_file_contains "esc() used on recent brewery" "$STATS_FILE" 'esc(r.brewery)'
+# Stats page uses safe DOM construction (textContent/createElement) instead of innerHTML+esc()
+assert_file_contains "Safe DOM: highlights use textContent" "$STATS_FILE" '.textContent'
+assert_file_contains "Safe DOM: highlights use createElement" "$STATS_FILE" "createElement('span')"
+assert_file_contains "Safe DOM: tables built via createDocumentFragment" "$STATS_FILE" 'createDocumentFragment()'
+assert_file_not_contains "No innerHTML with user data in highlights" "$STATS_FILE" 'innerHTML = fmt('
+assert_file_not_contains "No innerHTML += in table rendering" "$STATS_FILE" 'innerHTML +='
 
 # JSON API
 STATS_JSON=$(curl -s -u "$STATS_USER:$STATS_PASS" "$BASE_URL/stats.php?format=json")
@@ -273,7 +272,67 @@ assert_no_header "Admin API emits no Access-Control-Allow-Origin header" \
     "$ADMIN_HDRS" "Access-Control-Allow-Origin"
 
 # ══════════════════════════════════════════════════════════════════════
-# 8. STATIC PAGES
+# 8. BAD RATER DETECTION API
+# ══════════════════════════════════════════════════════════════════════
+printf "\n\033[1m▸ Bad rater detection API\033[0m\n"
+
+assert_status "Bad raters API without auth returns 401" \
+    "$BASE_URL/admin_api.php?action=bad_raters" 401
+
+BAD_RATERS_FILE="$TMPDIR_TEST/bad_raters.json"
+curl -s -u "$ADMIN_USER:$ADMIN_PASS" \
+    "$BASE_URL/admin_api.php?action=bad_raters" > "$BAD_RATERS_FILE"
+BAD_RATERS_STATUS=$(python3 -c "import sys,json; print(json.load(open(sys.argv[1])).get('status',''))" "$BAD_RATERS_FILE" 2>/dev/null || echo "")
+if [ "$BAD_RATERS_STATUS" = "success" ]; then
+    pass "Bad raters API returns success status"
+else
+    fail "Bad raters API — got status: $BAD_RATERS_STATUS"
+fi
+assert_file_contains "Bad raters response has summary field" "$BAD_RATERS_FILE" '"summary"'
+assert_file_contains "Bad raters response has flagged field" "$BAD_RATERS_FILE" '"flagged"'
+
+# POST exclude_rater without X-Requested-With should return 403
+assert_status "Exclude rater without CSRF header returns 403" \
+    "$BASE_URL/admin_api.php?action=exclude_rater" 403 \
+    -u "$ADMIN_USER:$ADMIN_PASS" \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"test","exclude":true}'
+
+# POST exclude_rater with proper headers should work
+EXCLUDE_BODY=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" \
+    -X POST -H "Content-Type: application/json" -H "X-Requested-With: XMLHttpRequest" \
+    -d '{"session_id":"smoke-test-rater","exclude":true,"patterns":["Spam Rater"]}' \
+    "$BASE_URL/admin_api.php?action=exclude_rater")
+EXCLUDE_STATUS=$(echo "$EXCLUDE_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+if [ "$EXCLUDE_STATUS" = "success" ]; then
+    pass "Exclude rater API returns success"
+else
+    fail "Exclude rater API — got status: $EXCLUDE_STATUS"
+fi
+
+# Clean up: remove the test exclusion
+curl -s -u "$ADMIN_USER:$ADMIN_PASS" \
+    -X POST -H "Content-Type: application/json" -H "X-Requested-With: XMLHttpRequest" \
+    -d '{"session_id":"smoke-test-rater","exclude":false}' \
+    "$BASE_URL/admin_api.php?action=exclude_rater" > /dev/null
+
+# GET excluded_raters returns the list
+EXCLUDED_LIST_BODY=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" \
+    "$BASE_URL/admin_api.php?action=excluded_raters")
+EXCLUDED_LIST_STATUS=$(echo "$EXCLUDED_LIST_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+if [ "$EXCLUDED_LIST_STATUS" = "success" ]; then
+    pass "Excluded raters list API returns success"
+else
+    fail "Excluded raters list API — got status: $EXCLUDED_LIST_STATUS"
+fi
+
+# Stats with exclude_raters param
+assert_status "Stats JSON with exclude_raters param returns 200" \
+    "$BASE_URL/stats.php?format=json&exclude_raters=1" 200 \
+    -u "$STATS_USER:$STATS_PASS"
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. STATIC PAGES
 # ══════════════════════════════════════════════════════════════════════
 printf "\n\033[1m▸ Other pages\033[0m\n"
 

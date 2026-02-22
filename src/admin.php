@@ -647,6 +647,42 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             color: var(--card-paragraph-color);
         }
 
+        /* Bad Rater Detection */
+        .rater-pattern-badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            margin: 0.125rem;
+        }
+        .rater-pattern-high { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .rater-pattern-medium { background: rgba(252,211,77,0.2); color: #fcd34d; }
+        .rater-pattern-low { background: rgba(110,231,183,0.2); color: #6ee7b7; }
+        .rater-conf-high { color: #ef4444; font-weight: 700; }
+        .rater-conf-medium { color: #fcd34d; font-weight: 600; }
+        .rater-conf-low { color: #6ee7b7; }
+        .rater-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+        .rater-table th {
+            text-align: left; padding: 0.625rem 0.5rem; font-weight: 600;
+            font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--label-color); border-bottom: 2px solid var(--divider-color); white-space: nowrap;
+        }
+        .rater-table td {
+            padding: 0.5rem; border-bottom: 1px solid var(--divider-color);
+            color: var(--card-paragraph-color); vertical-align: top;
+        }
+        .rater-table tr.excluded-row { opacity: 0.5; }
+        .rater-excluded-badge {
+            background: rgba(239,68,68,0.2); color: #fca5a5;
+            font-size: 0.6875rem; font-weight: 700; padding: 0.125rem 0.5rem; border-radius: 9999px;
+        }
+        .rater-scan-info {
+            font-size: 0.875rem; color: var(--card-paragraph-color);
+            padding: 0.75rem; background-color: var(--palette-interactive);
+            border-radius: 0.375rem; margin-bottom: 1rem;
+        }
+
         @media (max-width: 768px) {
             .form-grid {
                 grid-template-columns: 1fr;
@@ -722,6 +758,23 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             <div class="highlight-section">
                 <div id="versions-list">
                     <p style="color: var(--card-paragraph-color); font-size: 0.875rem;">Loading versions...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bad Rater Detection -->
+        <div class="section-header" id="raters-header" onclick="window._admin.toggleRaters()">
+            <h2 class="text-xl font-bold flex-grow" style="margin:0">Bad Rater Detection</h2>
+            <span class="toggle-icon rotated" id="raters-toggle">&#9660;</span>
+        </div>
+        <div class="section-content collapsed" id="raters-content">
+            <div class="highlight-section">
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="btn-scan-raters" onclick="window._admin.scanBadRaters()">Scan for Bad Raters</button>
+                    <span id="rater-scan-status" style="font-size:0.875rem; color:var(--card-paragraph-color);"></span>
+                </div>
+                <div id="raters-results">
+                    <p style="color: var(--card-paragraph-color); font-size: 0.875rem;">Click "Scan for Bad Raters" to analyse the ratings log for suspicious patterns.</p>
                 </div>
             </div>
         </div>
@@ -1044,7 +1097,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
             fetch('admin_api.php?action=save', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(currentBeers)
             })
             .then(function(res) { return res.json(); })
@@ -1323,7 +1376,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
             fetch('admin_api.php?action=restore', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({ filename: filename })
             })
             .then(function(res) { return res.json(); })
@@ -1447,7 +1500,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
                 fetch('admin_api.php?action=untappd_lookup', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                     body: JSON.stringify(payload)
                 })
                 .then(function(res) { return res.json(); })
@@ -1486,7 +1539,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
             fetch('admin_api.php?action=untappd_lookup', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(items)
             })
             .then(function(res) { return res.json(); })
@@ -1684,7 +1737,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             input.disabled = true;
             fetch('admin_api.php?action=untappd_lookup', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify([{ id: beerId, manual_url: url }])
             })
             .then(function(res) { return res.json(); })
@@ -1710,6 +1763,215 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             });
         }
 
+        // --- Bad Rater Detection ---
+        var raterResults = null;
+
+        function toggleRaters() {
+            var content = document.getElementById('raters-content');
+            var icon = document.getElementById('raters-toggle');
+            content.classList.toggle('collapsed');
+            icon.classList.toggle('rotated');
+        }
+
+        function scanBadRaters() {
+            var btn = document.getElementById('btn-scan-raters');
+            var status = document.getElementById('rater-scan-status');
+            btn.disabled = true;
+            btn.textContent = 'Scanning...';
+            status.textContent = 'Analysing ratings log...';
+
+            fetch('admin_api.php?action=bad_raters', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === 'success') {
+                    raterResults = data;
+                    renderRaterResults(data);
+                    status.textContent = 'Scan complete. ' + data.summary.total_sessions_analyzed + ' sessions analysed.';
+                } else {
+                    showToast('Error: ' + (data.message || 'Scan failed'), 'error');
+                    status.textContent = 'Scan failed.';
+                }
+            })
+            .catch(function(err) {
+                showToast('Network error: ' + err.message, 'error');
+                status.textContent = 'Scan failed.';
+            })
+            .finally(function() {
+                btn.disabled = false;
+                btn.textContent = 'Scan for Bad Raters';
+            });
+        }
+
+        function getSortedRaters() {
+            if (!raterResults || !raterResults.flagged) return [];
+            var raters = [];
+            var flagged = raterResults.flagged;
+            for (var sid in flagged) {
+                if (Object.prototype.hasOwnProperty.call(flagged, sid)) {
+                    raters.push(flagged[sid]);
+                }
+            }
+            raters.sort(function(a, b) {
+                return b.patterns.length - a.patterns.length || b.total_raw_entries - a.total_raw_entries;
+            });
+            return raters;
+        }
+
+        function renderRaterResults(data) {
+            var container = document.getElementById('raters-results');
+            var raters = getSortedRaters();
+
+            container.textContent = '';
+
+            if (raters.length === 0) {
+                var empty = document.createElement('p');
+                empty.style.cssText = 'color:var(--card-paragraph-color); padding:1rem; text-align:center;';
+                empty.textContent = 'No suspicious raters detected.';
+                container.appendChild(empty);
+                return;
+            }
+
+            // Summary bar (only server-controlled numbers, safe to build with textContent)
+            var infoDiv = document.createElement('div');
+            infoDiv.className = 'rater-scan-info';
+            var pcounts = data.summary.pattern_counts || {};
+            var parts = [];
+            for (var p in pcounts) {
+                if (Object.prototype.hasOwnProperty.call(pcounts, p)) parts.push(p + ': ' + pcounts[p]);
+            }
+            infoDiv.textContent = raters.length + ' suspicious session(s) flagged out of ' + data.summary.total_sessions_analyzed + ' analysed. Pattern breakdown: ' + parts.join(', ');
+            container.appendChild(infoDiv);
+
+            // Build table with safe DOM construction
+            var wrapper = document.createElement('div');
+            wrapper.style.cssText = 'max-height:50vh; overflow-y:auto;';
+            var table = document.createElement('table');
+            table.className = 'rater-table';
+
+            var thead = document.createElement('thead');
+            var headRow = document.createElement('tr');
+            ['Session ID','Patterns','Confidence','Raw','Deduped','Scored','Action'].forEach(function(txt) {
+                var th = document.createElement('th');
+                th.textContent = txt;
+                headRow.appendChild(th);
+            });
+            thead.appendChild(headRow);
+            table.appendChild(thead);
+
+            var tbody = document.createElement('tbody');
+            var frag = document.createDocumentFragment();
+
+            for (var i = 0; i < raters.length; i++) {
+                var r = raters[i];
+                var sid = r.session_id;
+                var shortSid = sid.length > 20 ? sid.substring(0, 20) + '...' : sid;
+                var tr = document.createElement('tr');
+                if (r.excluded) tr.className = 'excluded-row';
+
+                // Session ID cell
+                var tdSid = document.createElement('td');
+                tdSid.title = sid;
+                var code = document.createElement('code');
+                code.style.fontSize = '0.75rem';
+                code.textContent = shortSid;
+                tdSid.appendChild(code);
+                tr.appendChild(tdSid);
+
+                // Patterns cell
+                var tdPat = document.createElement('td');
+                for (var j = 0; j < r.patterns.length; j++) {
+                    var pat = r.patterns[j];
+                    var badge = document.createElement('span');
+                    badge.className = 'rater-pattern-badge ' + (pat.severity === 'High' ? 'rater-pattern-high' : (pat.severity === 'Medium' ? 'rater-pattern-medium' : 'rater-pattern-low'));
+                    badge.title = pat.detail;
+                    badge.textContent = pat.name;
+                    tdPat.appendChild(badge);
+                }
+                tr.appendChild(tdPat);
+
+                // Confidence cell
+                var tdConf = document.createElement('td');
+                var confSpan = document.createElement('span');
+                confSpan.className = r.confidence === 'High' ? 'rater-conf-high' : (r.confidence === 'Medium' ? 'rater-conf-medium' : 'rater-conf-low');
+                confSpan.textContent = r.confidence;
+                tdConf.appendChild(confSpan);
+                tr.appendChild(tdConf);
+
+                // Numeric cells
+                ['total_raw_entries','total_deduped_ratings','total_scored_ratings'].forEach(function(key) {
+                    var td = document.createElement('td');
+                    td.textContent = String(r[key]);
+                    tr.appendChild(td);
+                });
+
+                // Action cell — use data attributes instead of inline onclick with user data
+                var tdAction = document.createElement('td');
+                var btn = document.createElement('button');
+                btn.setAttribute('data-sid', sid);
+                if (r.excluded) {
+                    btn.className = 'btn-small btn-success';
+                    btn.textContent = 'Include';
+                    btn.setAttribute('data-exclude', 'false');
+                    tdAction.appendChild(btn);
+                    var exBadge = document.createElement('span');
+                    exBadge.className = 'rater-excluded-badge';
+                    exBadge.textContent = 'Excluded';
+                    tdAction.appendChild(document.createTextNode(' '));
+                    tdAction.appendChild(exBadge);
+                } else {
+                    btn.className = 'btn-small btn-secondary';
+                    btn.textContent = 'Exclude';
+                    btn.setAttribute('data-exclude', 'true');
+                    tdAction.appendChild(btn);
+                }
+                tr.appendChild(tdAction);
+                frag.appendChild(tr);
+            }
+
+            tbody.appendChild(frag);
+            table.appendChild(tbody);
+            wrapper.appendChild(table);
+            container.appendChild(wrapper);
+
+            // Event delegation: handle exclude/include clicks safely
+            wrapper.addEventListener('click', function(e) {
+                var btn = e.target.closest('button[data-sid]');
+                if (!btn) return;
+                var clickedSid = btn.getAttribute('data-sid');
+                var doExclude = btn.getAttribute('data-exclude') === 'true';
+                toggleExcludeRater(clickedSid, doExclude);
+            });
+        }
+
+        function toggleExcludeRater(sessionId, exclude) {
+            var flagged = raterResults ? raterResults.flagged : {};
+            var rater = flagged[sessionId];
+            var patternNames = rater ? rater.patterns.map(function(p) { return p.name; }) : [];
+
+            fetch('admin_api.php?action=exclude_rater', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ session_id: sessionId, exclude: exclude, patterns: patternNames })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === 'success') {
+                    if (raterResults && raterResults.flagged[sessionId]) {
+                        raterResults.flagged[sessionId].excluded = exclude;
+                    }
+                    renderRaterResults(raterResults);
+                    showToast(exclude ? 'Rater excluded from stats' : 'Rater included in stats');
+                } else {
+                    showToast('Error: ' + (data.message || 'Failed'), 'error');
+                }
+            })
+            .catch(function(err) {
+                showToast('Network error: ' + err.message, 'error');
+            });
+        }
+
         // Expose functions to onclick handlers
         window._admin = {
             startEdit: startEdit,
@@ -1724,7 +1986,10 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             declineLookup: declineLookup,
             acceptAllHigh: acceptAllHigh,
             manualFetch: manualFetch,
-            showPendingDiff: showPendingDiff
+            showPendingDiff: showPendingDiff,
+            toggleRaters: toggleRaters,
+            scanBadRaters: scanBadRaters,
+            toggleExcludeRater: toggleExcludeRater
         };
         window.showAddModal = showAddModal;
         window.closeAddModal = closeAddModal;
