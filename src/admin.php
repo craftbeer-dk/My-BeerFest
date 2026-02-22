@@ -685,7 +685,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                     <button onclick="window._admin.bulkLookup('missing-url')">Missing Untappd URL<br><span class="menu-hint" id="lookup-hint-missing-url"></span></button>
                 </div>
             </div>
-            <span id="changes-badge" class="changes-badge">0 changes</span>
+            <span id="changes-badge" class="changes-badge" style="cursor:pointer;" onclick="window._admin.showPendingDiff()">0 changes</span>
             <div style="flex:1"></div>
             <input type="text" id="search-input" class="search-input" placeholder="Search beers..." oninput="handleSearch()">
         </div>
@@ -696,6 +696,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 <table class="admin-table">
                     <thead>
                         <tr>
+                            <th style="min-width:120px">Actions</th>
                             <th>Name</th>
                             <th>Brewery</th>
                             <th>Style</th>
@@ -704,7 +705,6 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                             <th>Country</th>
                             <th>Session</th>
                             <th>Note</th>
-                            <th style="min-width:120px">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="beer-table-body">
@@ -818,16 +818,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
             for (var i = 0; i < filtered.length; i++) {
                 var beer = filtered[i];
-                var isEditing = editingId === beer.id;
                 var rowClass = '';
                 if (modifiedIds[beer.id] === 'modified') rowClass = 'modified';
                 else if (modifiedIds[beer.id] === 'added') rowClass = 'added';
 
-                if (isEditing) {
-                    html += renderEditRow(beer, rowClass);
-                } else {
-                    html += renderDisplayRow(beer, rowClass);
-                }
+                html += renderDisplayRow(beer, rowClass);
             }
             tbody.innerHTML = html;
             updateToolbar();
@@ -835,6 +830,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
         function renderDisplayRow(beer, rowClass) {
             return '<tr class="' + rowClass + '" data-id="' + esc(beer.id) + '">' +
+                '<td><div class="actions-cell">' +
+                    '<button class="btn-small btn-primary" onclick="window._admin.startEdit(\'' + esc(beer.id) + '\')">Edit</button>' +
+                    '<button class="btn-small btn-untappd" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT</button>' +
+                    '<button class="btn-small btn-secondary" onclick="window._admin.deleteBeer(\'' + esc(beer.id) + '\')">Del</button>' +
+                '</div></td>' +
                 '<td title="' + esc(beer.name || '') + '">' + esc(beer.name || '') + '</td>' +
                 '<td title="' + esc(beer.brewery || '') + '">' + esc(beer.brewery || '') + '</td>' +
                 '<td title="' + esc(beer.style || '') + '">' + esc(beer.style || '') + '</td>' +
@@ -843,29 +843,10 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 '<td>' + esc(beer.country || '') + '</td>' +
                 '<td>' + esc(beer.session || '') + '</td>' +
                 '<td title="' + esc(beer.note || '') + '">' + esc(beer.note || '') + '</td>' +
-                '<td><div class="actions-cell">' +
-                    '<button class="btn-small btn-primary" onclick="window._admin.startEdit(\'' + esc(beer.id) + '\')">Edit</button>' +
-                    '<button class="btn-small btn-untappd" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT</button>' +
-                    '<button class="btn-small btn-secondary" onclick="window._admin.deleteBeer(\'' + esc(beer.id) + '\')">Del</button>' +
-                '</div></td>' +
             '</tr>';
         }
 
-        function renderEditRow(beer, rowClass) {
-            var html = '<tr class="' + rowClass + '" data-id="' + esc(beer.id) + '">';
-            for (var f = 0; f < FIELDS.length; f++) {
-                var field = FIELDS[f];
-                var val = beer[field.key] != null ? beer[field.key] : '';
-                var attrs = 'type="' + field.type + '" data-field="' + field.key + '" value="' + esc(String(val)) + '"';
-                if (field.step) attrs += ' step="' + field.step + '"';
-                html += '<td><input ' + attrs + ' onkeydown="window._admin.handleEditKey(event, \'' + esc(beer.id) + '\')"></td>';
-            }
-            html += '<td><div class="actions-cell">' +
-                '<button class="btn-small btn-success" onclick="window._admin.saveEdit(\'' + esc(beer.id) + '\')">OK</button>' +
-                '<button class="btn-small btn-ghost" onclick="window._admin.cancelEdit()">X</button>' +
-            '</div></td></tr>';
-            return html;
-        }
+        // renderEditRow removed — editing now uses the modal
 
         function getFilteredBeers() {
             if (!searchTerm) return currentBeers;
@@ -881,77 +862,33 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             });
         }
 
-        // --- Edit ---
+        // --- Edit (modal-based) ---
         function startEdit(beerId) {
+            var beer = currentBeers.find(function(b) { return b.id === beerId; });
+            if (!beer) return;
+
+            var form = document.getElementById('add-form');
+            var html = '<div class="form-group"><label class="form-label">ID (unique)</label>' +
+                '<input type="text" class="form-input" id="add-field-id" value="' + esc(beer.id) + '" readonly style="opacity:0.6;cursor:not-allowed;"></div>';
+
+            for (var f = 0; f < FIELDS.length; f++) {
+                var field = FIELDS[f];
+                var val = beer[field.key] != null ? beer[field.key] : '';
+                html += '<div class="form-group"><label class="form-label">' + esc(field.label) +
+                    (field.required ? ' *' : '') + '</label>' +
+                    '<input type="' + field.type + '" class="form-input" id="add-field-' + field.key + '"' +
+                    ' value="' + esc(String(val)) + '"' +
+                    (field.step ? ' step="' + field.step + '"' : '') + '></div>';
+            }
+            form.innerHTML = html;
+
             editingId = beerId;
-            renderTable();
-            // Focus first input
-            var row = document.querySelector('tr[data-id="' + beerId + '"]');
-            if (row) {
-                var input = row.querySelector('input');
-                if (input) input.focus();
-            }
-        }
-
-        function saveEdit(beerId) {
-            var row = document.querySelector('tr[data-id="' + beerId + '"]');
-            if (!row) return;
-
-            var inputs = row.querySelectorAll('input');
-            var beerIndex = currentBeers.findIndex(function(b) { return b.id === beerId; });
-            if (beerIndex < 0) return;
-
-            var beer = currentBeers[beerIndex];
-            var changed = false;
-
-            inputs.forEach(function(input) {
-                var field = input.getAttribute('data-field');
-                var val = input.value.trim();
-
-                if (field === 'alc' || field === 'rating') {
-                    val = val === '' ? null : parseFloat(val);
-                    if (val !== null && isNaN(val)) val = null;
-                }
-
-                var orig = beer[field];
-                if (orig === undefined) orig = null;
-                if (val !== orig) {
-                    changed = true;
-                }
-                if (val === null || val === '') {
-                    delete beer[field];
-                } else {
-                    beer[field] = val;
-                }
-            });
-
-            if (changed && !modifiedIds[beerId]) {
-                // Check if it's actually different from original
-                var origBeer = originalBeers.find(function(b) { return b.id === beerId; });
-                if (origBeer) {
-                    modifiedIds[beerId] = 'modified';
-                } else {
-                    modifiedIds[beerId] = 'added';
-                }
-            }
-
-            editingId = null;
-            renderTable();
-        }
-
-        function cancelEdit() {
-            editingId = null;
-            renderTable();
-        }
-
-        function handleEditKey(e, beerId) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                saveEdit(beerId);
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                cancelEdit();
-            }
+            document.getElementById('add-modal-title').textContent = 'Edit Beer';
+            document.getElementById('add-modal-confirm').textContent = 'Save Changes';
+            document.getElementById('add-modal').classList.remove('hidden');
+            // Focus the first editable field (name)
+            var firstInput = document.getElementById('add-field-name');
+            if (firstInput) firstInput.focus();
         }
 
         // --- Delete ---
@@ -972,12 +909,13 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 deletedBeers[beerId] = beer;
             }
 
-            if (editingId === beerId) editingId = null;
+            if (editingId === beerId) closeAddModal();
             renderTable();
         }
 
         // --- Add Beer ---
         function showAddModal() {
+            editingId = null;
             var form = document.getElementById('add-form');
             var html = '<div class="form-group"><label class="form-label">ID (unique)</label>' +
                 '<input type="text" class="form-input" id="add-field-id" value="' + generateId() + '"></div>';
@@ -996,22 +934,26 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         }
 
         function closeAddModal() {
+            editingId = null;
             document.getElementById('add-modal').classList.add('hidden');
         }
 
         window.confirmAddBeer = function() {
-            var idInput = document.getElementById('add-field-id');
-            var id = idInput.value.trim();
+            var isEditing = editingId !== null;
+            var id = isEditing ? editingId : document.getElementById('add-field-id').value.trim();
+
             if (!id) {
                 showToast('ID is required', 'error');
                 return;
             }
-            if (currentBeers.some(function(b) { return b.id === id; })) {
+
+            if (!isEditing && currentBeers.some(function(b) { return b.id === id; })) {
                 showToast('A beer with this ID already exists', 'error');
                 return;
             }
 
-            var beer = { id: id };
+            // Collect field values from modal
+            var newValues = {};
             for (var f = 0; f < FIELDS.length; f++) {
                 var field = FIELDS[f];
                 var input = document.getElementById('add-field-' + field.key);
@@ -1027,16 +969,56 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                     if (val !== null && isNaN(val)) val = null;
                 }
 
-                if (val !== null && val !== '') {
-                    beer[field.key] = val;
-                }
+                newValues[field.key] = val;
             }
 
-            currentBeers.push(beer);
-            modifiedIds[id] = 'added';
+            if (isEditing) {
+                // Edit existing beer
+                var beerIndex = currentBeers.findIndex(function(b) { return b.id === id; });
+                if (beerIndex < 0) return;
+                var beer = currentBeers[beerIndex];
+
+                // Apply values and detect real changes
+                var hasChanges = false;
+                for (var key in newValues) {
+                    var newVal = newValues[key];
+                    var oldVal = beer[key];
+                    if (oldVal === undefined) oldVal = null;
+                    if (newVal === '') newVal = null;
+
+                    // Normalize for comparison: both null/empty are equivalent
+                    var oldNorm = (oldVal === null || oldVal === undefined || oldVal === '') ? null : oldVal;
+                    var newNorm = (newVal === null || newVal === undefined || newVal === '') ? null : newVal;
+                    if (String(oldNorm) !== String(newNorm)) {
+                        hasChanges = true;
+                    }
+
+                    if (newVal === null || newVal === '') {
+                        delete beer[key];
+                    } else {
+                        beer[key] = newVal;
+                    }
+                }
+
+                if (hasChanges && !modifiedIds[id]) {
+                    var origBeer = originalBeers.find(function(b) { return b.id === id; });
+                    modifiedIds[id] = origBeer ? 'modified' : 'added';
+                }
+            } else {
+                // Add new beer
+                var beer = { id: id };
+                for (var key in newValues) {
+                    if (newValues[key] !== null && newValues[key] !== '') {
+                        beer[key] = newValues[key];
+                    }
+                }
+                currentBeers.push(beer);
+                modifiedIds[id] = 'added';
+            }
+
             closeAddModal();
             renderTable();
-            showToast('Beer added (unsaved)');
+            showToast(isEditing ? (hasChanges ? 'Beer updated (unsaved)' : 'No changes detected') : 'Beer added (unsaved)');
         };
 
         function generateId() {
@@ -1299,6 +1281,41 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             document.getElementById('diff-modal').classList.add('hidden');
         }
         window.closeDiffModal = closeDiffModal;
+
+        function showPendingDiff() {
+            if (Object.keys(modifiedIds).length === 0) return;
+
+            document.getElementById('diff-modal-title').textContent = 'Pending Changes';
+
+            // Build the diff from tracked changes
+            var added = [];
+            var removed = [];
+            var modified = [];
+
+            for (var id in modifiedIds) {
+                var type = modifiedIds[id];
+                if (type === 'added') {
+                    var beer = currentBeers.find(function(b) { return b.id === id; });
+                    if (beer) added.push(beer);
+                } else if (type === 'deleted') {
+                    var dBeer = deletedBeers[id];
+                    if (dBeer) removed.push(dBeer);
+                } else if (type === 'modified') {
+                    var origBeer = originalBeers.find(function(b) { return b.id === id; });
+                    var currBeer = currentBeers.find(function(b) { return b.id === id; });
+                    if (origBeer && currBeer) {
+                        var changes = getFieldChanges(origBeer, currBeer);
+                        if (changes.length > 0) {
+                            modified.push({ beer: currBeer, changes: changes });
+                        }
+                    }
+                }
+            }
+
+            var diff = { added: added, removed: removed, modified: modified, unchanged: currentBeers.length - added.length - modified.length };
+            renderDiff(diff);
+            document.getElementById('diff-modal').classList.remove('hidden');
+        }
 
         // --- Restore ---
         function restoreVersion(filename, dateLabel) {
@@ -1696,9 +1713,6 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         // Expose functions to onclick handlers
         window._admin = {
             startEdit: startEdit,
-            saveEdit: saveEdit,
-            cancelEdit: cancelEdit,
-            handleEditKey: handleEditKey,
             deleteBeer: deleteBeer,
             showDiff: showDiff,
             restoreVersion: restoreVersion,
@@ -1709,7 +1723,8 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             acceptLookup: acceptLookup,
             declineLookup: declineLookup,
             acceptAllHigh: acceptAllHigh,
-            manualFetch: manualFetch
+            manualFetch: manualFetch,
+            showPendingDiff: showPendingDiff
         };
         window.showAddModal = showAddModal;
         window.closeAddModal = closeAddModal;
