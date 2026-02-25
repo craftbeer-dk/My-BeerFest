@@ -6,7 +6,7 @@ services:
       target: nginx
     restart: unless-stopped
     ports:
-      - "8181:80"
+      - "${PORT:-8181}:80"
     volumes:
       - ./custom:/var/www/html/custom:ro
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
