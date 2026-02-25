@@ -1258,34 +1258,76 @@ $sessionId = $_SESSION['session_id'];
             }
 
             // --- Start Application ---
-            Promise.all([
-                fetch(beerDataUrl).then(res => res.json()),
-                fetch('data/flags.json').then(res => res.json())
-            ])
-            .then(([beers, flags]) => {
-                allBeers = beers;
-                countryFlags = flags;
-                lastFetchTimestamp = new Date().getTime();
+            let listenersInitialized = false;
+
+            function bootstrapApp() {
                 processBeerData();
-                
-                initializeAppListeners();
+                if (!listenersInitialized) {
+                    initializeAppListeners();
+                    listenersInitialized = true;
+                }
                 initializeFilters();
                 importDataFromUrlOnLoad();
                 loadState();
-                
+
                 if (enableStatisticsLogging && statsConsent === null) {
                     if(consentBanner) consentBanner.classList.remove('hidden');
                 } else if (enableStatisticsLogging) {
                     updateStatisticsNotice();
                 }
-                
+
                 renderBeers();
                 updateClearButtonState();
                 clearSearchBtn.classList.toggle('hidden', !searchInput.value);
+            }
+
+            // Try to render instantly from cached data (avoids flash of empty page on reload)
+            let bootstrapped = false;
+            try {
+                const cachedBeers = localStorage.getItem('cachedBeers');
+                const cachedFlags = localStorage.getItem('cachedFlags');
+                if (cachedBeers && cachedFlags) {
+                    allBeers = JSON.parse(cachedBeers);
+                    countryFlags = JSON.parse(cachedFlags);
+                    bootstrapped = true;
+                    bootstrapApp();
+                }
+            } catch (e) { /* ignore corrupt cache */ }
+
+            // Fetch fresh data from network (updates cache and re-renders if data changed)
+            Promise.all([
+                fetch(beerDataUrl).then(res => res.json()),
+                fetch('data/flags.json').then(res => res.json())
+            ])
+            .then(([beers, flags]) => {
+                lastFetchTimestamp = new Date().getTime();
+
+                // Save to localStorage for instant render on next load
+                try {
+                    localStorage.setItem('cachedBeers', JSON.stringify(beers));
+                    localStorage.setItem('cachedFlags', JSON.stringify(flags));
+                } catch (e) { /* quota exceeded — not critical */ }
+
+                if (!bootstrapped) {
+                    // First visit (no cache) — full init
+                    allBeers = beers;
+                    countryFlags = flags;
+                    bootstrapApp();
+                } else if (JSON.stringify(beers) !== JSON.stringify(allBeers)) {
+                    // Data changed — update and re-render
+                    allBeers = beers;
+                    countryFlags = flags;
+                    processBeerData();
+                    initializeFilters();
+                    renderBeers();
+                    showMessage(translations['beer_list_updated'] ?? "Beer list updated!", 'success');
+                }
             })
             .catch(error => {
-                console.error('Failed to load initial data:', error);
-                document.getElementById('beer-list').innerHTML = `<div class="error-message">${translations['error_fetching_data'] ?? 'Could not fetch beer data'}</div>`;
+                if (!bootstrapped) {
+                    console.error('Failed to load initial data:', error);
+                    document.getElementById('beer-list').innerHTML = `<div class="error-message">${translations['error_fetching_data'] ?? 'Could not fetch beer data'}</div>`;
+                }
             });
         });
     </script>
