@@ -605,7 +605,7 @@ $sessionId = $_SESSION['session_id'];
             echo str_replace('{icon}', $shareIconSvg, $iosText);
         ?></p>
         <div class="button-group">
-            <button id="install-ios-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_app_dismiss'] ?? 'Not now'); ?></button>
+            <button id="install-ios-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_ios_dismiss'] ?? 'OK'); ?></button>
         </div>
     </div>
 
@@ -613,7 +613,7 @@ $sessionId = $_SESSION['session_id'];
     <div id="install-ios-safari-banner" class="install-banner hidden">
         <p><?php echo htmlspecialchars($translations['install_ios_open_safari'] ?? 'To install this app, open it in Safari first'); ?></p>
         <div class="button-group">
-            <button id="install-ios-safari-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_app_dismiss'] ?? 'Not now'); ?></button>
+            <button id="install-ios-safari-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_ios_dismiss'] ?? 'OK'); ?></button>
         </div>
     </div>
 
