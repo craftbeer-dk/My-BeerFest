@@ -588,8 +588,8 @@ $sessionId = $_SESSION['session_id'];
     <div id="consent-banner" class="consent-banner hidden">
         <p id="consent-text"><?php echo htmlspecialchars($translations['statistics_consent_text'] ?? 'May we collect anonymous usage statistics to improve the app? Your personal selections are always saved locally in your browser regardless of your choice.'); ?></p>
         <div class="button-group">
-            <button id="accept-stats-button"><?php echo htmlspecialchars($translations['accept_cookies'] ?? 'Accept'); ?></button>
-            <button id="decline-stats-button" class="decline-button"><?php echo htmlspecialchars($translations['decline_cookies'] ?? 'Decline'); ?></button>
+            <button id="accept-stats-button"><?php echo htmlspecialchars($translations['accept_stats'] ?? 'Accept'); ?></button>
+            <button id="decline-stats-button" class="decline-button"><?php echo htmlspecialchars($translations['decline_stats'] ?? 'Decline'); ?></button>
         </div>
     </div>
     <?php endif; ?>
