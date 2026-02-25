@@ -363,10 +363,11 @@ $sessionId = $_SESSION['session_id'];
         }
         .consent-banner .button-group, .update-banner .button-group {
             display: flex;
-            flex-wrap: wrap; /* Allow buttons to wrap on small screens */
+            flex-wrap: wrap;
             justify-content: center;
             gap: 1rem;
             width: 100%;
+            flex-shrink: 0;
         }
         .consent-banner button, .update-banner button {
             background-color: var(--button-primary-background-color);
@@ -391,14 +392,17 @@ $sessionId = $_SESSION['session_id'];
         @media (min-width: 768px) {
             .consent-banner, .update-banner {
                 flex-direction: row;
-                justify-content: center; /* Changed from space-between */
+                justify-content: flex-end;
                 align-items: center;
                 padding: 1rem 2rem;
-                gap: 2rem; /* Creates space between text and buttons */
+                gap: 2rem;
             }
             .consent-banner p, .update-banner p {
-                text-align: left;
-                flex-grow: 0; /* Prevents text from taking all available space */
+                text-align: right;
+                flex-grow: 0;
+            }
+            .consent-banner .button-group, .update-banner .button-group {
+                width: auto;
             }
         }
         .privacy-link {
