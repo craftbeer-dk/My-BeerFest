@@ -337,7 +337,7 @@ $sessionId = $_SESSION['session_id'];
         .toggle-icon.rotated {
             transform: rotate(-90deg);
         }
-        .consent-banner, .update-banner {
+        .consent-banner, .update-banner, .install-banner {
             position: fixed;
             bottom: 0;
             left: 0;
@@ -354,14 +354,14 @@ $sessionId = $_SESSION['session_id'];
             box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
             text-align: center;
         }
-        .consent-banner.hidden, .update-banner.hidden {
+        .consent-banner.hidden, .update-banner.hidden, .install-banner.hidden {
             display: none;
         }
-        .consent-banner p, .update-banner p {
+        .consent-banner p, .update-banner p, .install-banner p {
             margin: 0;
             font-size: 0.9rem;
         }
-        .consent-banner .button-group, .update-banner .button-group {
+        .consent-banner .button-group, .update-banner .button-group, .install-banner .button-group {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
@@ -369,7 +369,7 @@ $sessionId = $_SESSION['session_id'];
             width: 100%;
             flex-shrink: 0;
         }
-        .consent-banner button, .update-banner button {
+        .consent-banner button, .update-banner button, .install-banner button {
             background-color: var(--button-primary-background-color);
             color: white;
             padding: 0.5rem 1rem;
@@ -380,28 +380,28 @@ $sessionId = $_SESSION['session_id'];
             border: none;
             width: auto;
         }
-        .consent-banner button:hover, .update-banner button:hover {
+        .consent-banner button:hover, .update-banner button:hover, .install-banner button:hover {
             background-color: var(--button-primary-hover-bg);
         }
-        .consent-banner .decline-button {
+        .consent-banner .decline-button, .install-banner .decline-button {
             background-color: var(--button-secondary-bg);
         }
-        .consent-banner .decline-button:hover {
+        .consent-banner .decline-button:hover, .install-banner .decline-button:hover {
             background-color: var(--button-secondary-hover-bg);
         }
         @media (min-width: 768px) {
-            .consent-banner, .update-banner {
+            .consent-banner, .update-banner, .install-banner {
                 flex-direction: row;
                 justify-content: flex-end;
                 align-items: center;
                 padding: 1rem 2rem;
                 gap: 2rem;
             }
-            .consent-banner p, .update-banner p {
+            .consent-banner p, .update-banner p, .install-banner p {
                 text-align: right;
                 flex-grow: 0;
             }
-            .consent-banner .button-group, .update-banner .button-group {
+            .consent-banner .button-group, .update-banner .button-group, .install-banner .button-group {
                 width: auto;
             }
         }
@@ -584,6 +584,15 @@ $sessionId = $_SESSION['session_id'];
         <p><?php echo htmlspecialchars($translations['update_available_text'] ?? 'A new version is available.'); ?></p>
         <div class="button-group">
             <button id="update-app-button"><?php echo htmlspecialchars($translations['update_button_text'] ?? 'Update'); ?></button>
+        </div>
+    </div>
+
+    <!-- PWA Install Banner -->
+    <div id="install-banner" class="install-banner hidden">
+        <p><?php echo htmlspecialchars($translations['install_app_text'] ?? 'Install this app on your device for quick access'); ?></p>
+        <div class="button-group">
+            <button id="install-app-button"><?php echo htmlspecialchars($translations['install_app_button'] ?? 'Install'); ?></button>
+            <button id="install-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_app_dismiss'] ?? 'Not now'); ?></button>
         </div>
     </div>
 
@@ -1295,6 +1304,49 @@ $sessionId = $_SESSION['session_id'];
                 });
             }
         }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        const installBanner = document.getElementById('install-banner');
+        const installButton = document.getElementById('install-app-button');
+        const dismissButton = document.getElementById('install-dismiss-button');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+
+            // Check if user previously dismissed (suppress for 7 days)
+            const dismissed = localStorage.getItem('installDismissed');
+            if (dismissed && (Date.now() - parseInt(dismissed, 10)) < 7 * 24 * 60 * 60 * 1000) {
+                return;
+            }
+
+            if (installBanner) installBanner.classList.remove('hidden');
+        });
+
+        if (installButton) {
+            installButton.addEventListener('click', () => {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    deferredPrompt = null;
+                    if (installBanner) installBanner.classList.add('hidden');
+                });
+            });
+        }
+
+        if (dismissButton) {
+            dismissButton.addEventListener('click', () => {
+                localStorage.setItem('installDismissed', Date.now().toString());
+                if (installBanner) installBanner.classList.add('hidden');
+            });
+        }
+
+        // Hide banner if app is already installed
+        window.addEventListener('appinstalled', () => {
+            if (installBanner) installBanner.classList.add('hidden');
+            deferredPrompt = null;
+        });
     </script>
     <?php else: ?>
     <script>
