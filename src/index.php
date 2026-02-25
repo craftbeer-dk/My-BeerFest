@@ -596,7 +596,7 @@ $sessionId = $_SESSION['session_id'];
         </div>
     </div>
 
-    <!-- PWA Install Banner (iOS) -->
+    <!-- PWA Install Banner (iOS Safari) -->
     <div id="install-ios-banner" class="install-banner hidden">
         <p><?php
             $iosText = htmlspecialchars($translations['install_ios_text'] ?? 'To install this app, tap {icon} and choose "Add to Home Screen"');
@@ -605,6 +605,14 @@ $sessionId = $_SESSION['session_id'];
         ?></p>
         <div class="button-group">
             <button id="install-ios-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_app_dismiss'] ?? 'Not now'); ?></button>
+        </div>
+    </div>
+
+    <!-- PWA Install Banner (iOS non-Safari) -->
+    <div id="install-ios-safari-banner" class="install-banner hidden">
+        <p><?php echo htmlspecialchars($translations['install_ios_open_safari'] ?? 'To install this app, open it in Safari first'); ?></p>
+        <div class="button-group">
+            <button id="install-ios-safari-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_app_dismiss'] ?? 'Not now'); ?></button>
         </div>
     </div>
 
@@ -1320,10 +1328,15 @@ $sessionId = $_SESSION['session_id'];
         // PWA Install Prompt
         const INSTALL_DISMISS_DAYS = 7;
         const INSTALL_DISMISS_MS = INSTALL_DISMISS_DAYS * 24 * 60 * 60 * 1000;
+        const INSTALL_SHOW_DELAY = 15000; // 15 seconds
 
         function isInstallDismissed() {
             const dismissed = localStorage.getItem('installDismissed');
             return dismissed && (Date.now() - parseInt(dismissed, 10)) < INSTALL_DISMISS_MS;
+        }
+
+        function showBannerWithDelay(banner) {
+            if (banner) setTimeout(() => banner.classList.remove('hidden'), INSTALL_SHOW_DELAY);
         }
 
         // --- Android/Desktop install (beforeinstallprompt) ---
@@ -1336,7 +1349,7 @@ $sessionId = $_SESSION['session_id'];
             e.preventDefault();
             deferredPrompt = e;
             if (isInstallDismissed()) return;
-            if (installBanner) installBanner.classList.remove('hidden');
+            showBannerWithDelay(installBanner);
         });
 
         if (installButton) {
@@ -1365,20 +1378,23 @@ $sessionId = $_SESSION['session_id'];
         // --- iOS install guide ---
         const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+        // Safari on iOS: no CriOS (Chrome), no FxiOS (Firefox), no OPiOS (Opera)
+        const isIosSafari = isIos && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
 
         if (isIos && !isStandalone && !isInstallDismissed()) {
-            const iosBanner = document.getElementById('install-ios-banner');
-            if (iosBanner) iosBanner.classList.remove('hidden');
+            if (isIosSafari) {
+                showBannerWithDelay(document.getElementById('install-ios-banner'));
+            } else {
+                showBannerWithDelay(document.getElementById('install-ios-safari-banner'));
+            }
         }
 
-        const iosDismissButton = document.getElementById('install-ios-dismiss-button');
-        if (iosDismissButton) {
-            iosDismissButton.addEventListener('click', () => {
+        document.querySelectorAll('#install-ios-dismiss-button, #install-ios-safari-dismiss-button').forEach(btn => {
+            btn.addEventListener('click', () => {
                 localStorage.setItem('installDismissed', Date.now().toString());
-                const iosBanner = document.getElementById('install-ios-banner');
-                if (iosBanner) iosBanner.classList.add('hidden');
+                btn.closest('.install-banner').classList.add('hidden');
             });
-        }
+        });
     </script>
     <?php else: ?>
     <script>
