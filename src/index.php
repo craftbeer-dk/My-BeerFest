@@ -900,6 +900,10 @@ $sessionId = $_SESSION['session_id'];
             }
 
             function populateSelect(selectElement, options) {
+                // Keep the first option ("All …") and remove the rest
+                while (selectElement.options.length > 1) {
+                    selectElement.removeChild(selectElement.lastChild);
+                }
                 options.forEach(option => {
                     const opt = document.createElement('option');
                     opt.value = option;
