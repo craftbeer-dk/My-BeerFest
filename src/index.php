@@ -34,7 +34,8 @@ $festivalInfoText = getenv('FESTIVAL_INFO_TEXT') ?: $translations['default_info_
 $enableStatisticsLogging = getenv('ENABLE_STATISTICS_LOGGING') === 'true';
 $enableMainstyleFiltering = getenv('ENABLE_MAINSTYLE_FILTERING') === 'true';
 $contactEmail = getenv('CONTACT_EMAIL') ?: 'contact@mybeerfest.com';
-$themeColor = getenv('THEME_COLOR') ?: '#2B684B';
+require_once __DIR__ . '/config/theme_color.php';
+$themeColor = getThemeColor();
 $festivalTitleShort = getenv('FESTIVAL_TITLE_SHORT') ?: 'Ølfestival';
 $devMode = getenv('DEV_MODE') === 'true';
 

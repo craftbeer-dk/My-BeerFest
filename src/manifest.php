@@ -6,7 +6,8 @@ header('Content-Type: application/json');
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: 'My BeerFest';
 $festivalTitleShort = getenv('FESTIVAL_TITLE_SHORT') ?: 'My BeerFest';
 $festivalInfoText = getenv('FESTIVAL_INFO_TEXT') ?: 'My BeerFest';
-$themeColor = getenv('THEME_COLOR') ?: '#2B684B';
+require_once __DIR__ . '/config/theme_color.php';
+$themeColor = getThemeColor();
 
 // Resolve icon paths: use custom icons if available, otherwise defaults
 $icon192 = file_exists(__DIR__ . '/custom/icon-192.png') ? 'custom/icon-192.png' : 'images/icon-192.png';
