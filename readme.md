@@ -108,7 +108,7 @@ nginx/
 tests/
   smoke_test.sh       # Automated smoke & security tests
 docker-compose.yml
-Dockerfile            # Multi-stage: Node (Tailwind build) -> PHP-FPM
+Dockerfile            # Multi-stage: Node (Tailwind) -> PHP-FPM + Nginx targets
 ```
 
 ## Tech Stack
@@ -122,39 +122,60 @@ Dockerfile            # Multi-stage: Node (Tailwind build) -> PHP-FPM
 
 ## Customization
 
-### Color Themes
+The `custom/` directory lets you customize theme colors and PWA icons per deployment without modifying git-tracked files. This means you can `git pull` on a production server without merge conflicts.
 
-The app's color scheme is controlled by a single file: `src/config/theme.css`. It uses a two-tier CSS custom property system:
+### Setup
 
-1. **Tier 1 — Base palette**: A handful of raw colors (primary, surface, text accent, etc.)
-2. **Tier 2 — Component tokens**: Variables like `--card-background-color` that reference the palette
+```bash
+./init-custom.sh
+```
 
-To change the theme, replace the Tier 1 palette values in `theme.css`. Three alternative themes are included as references:
+This copies `src/config/theme.css` into `custom/theme.css` as a starting point. The entire `custom/` directory is gitignored.
+
+### Custom Theme Colors
+
+Edit `custom/theme.css` and change the palette variables:
+
+```css
+:root {
+    --palette-primary: #1a365d;
+    --palette-background: #1a365d;
+    --palette-surface: #2a4a7f;
+    /* ...etc */
+}
+```
+
+When `custom/theme.css` exists, it is loaded **instead of** the default `config/theme.css` — not in addition to it. This avoids CSS cascade issues and gives you full control. The component tokens in the same file inherit from the palette variables automatically.
+
+You can also use one of the preset themes as a starting point by copying it into `custom/`:
 
 | File | Look |
 |---|---|
-| `src/config/green.css` | Forest green + lime yellow (default) |
+| `src/config/green.css` | Forest green + lime yellow |
 | `src/config/blue.css` | Navy blue + warm gold |
 | `src/config/orange.css` | Orange + dark teal |
 
-To switch themes, copy the contents of one of these files into `theme.css`:
+When creating a custom theme, follow the pattern: keep `--palette-background` equal to `--palette-primary`, make `--palette-surface` a lighter shade and `--palette-interactive` a darker shade, and pick a vibrant accent for `--palette-text-primary`.
 
-```bash
-cp src/config/blue.css src/config/theme.css
+If your theme changes the primary color significantly, also update the `THEME_COLOR` environment variable to match `--palette-primary` — this controls the PWA status bar and splash screen color.
+
+### Custom PWA Icons
+
+Drop replacement PNG icons into `custom/`:
+
+```
+custom/icon-192.png   (192x192 — home screen)
+custom/icon-512.png   (512x512 — splash screen)
 ```
 
-When creating a custom theme, follow the pattern used by the existing themes: keep `--palette-background` equal to `--palette-primary` for a cohesive monochromatic base, make `--palette-surface` a lighter shade and `--palette-interactive` a darker shade of the same hue, and pick a vibrant accent for `--palette-text-primary`.
+The app checks for custom icons first and falls back to the defaults in `src/images/`. Icons should use the `any maskable` purpose format (safe area within the center 80% of the image).
 
-If your theme changes the primary color significantly, also update the `THEME_COLOR` environment variable in `docker-compose.yml` to match `--palette-primary` — this controls the PWA status bar and splash screen color.
+### How It Works
 
-### App Icon
-
-The PWA icon is served from two files:
-
-- `src/images/icon-192.png` (192x192 px — home screen icon)
-- `src/images/icon-512.png` (512x512 px — splash screen)
-
-To use your own icon, replace these files with your own PNG images at the same sizes. The icons are referenced in `src/manifest.php` and should use the `any maskable` purpose format (safe area within the center 80% of the image).
+- `custom/` is mounted into containers at `/var/www/html/custom/` (read-only)
+- PHP pages load `custom/theme.css` if it exists, otherwise fall back to `config/theme.css`
+- `manifest.php` and `index.php` resolve icon paths with a custom-first fallback
+- Default files in `src/config/` and `src/images/` remain tracked in git and are never modified on the server
 
 ## License
 

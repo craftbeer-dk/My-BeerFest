@@ -224,7 +224,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
     <title>Management Stats - <?php echo htmlspecialchars($festivalTitle); ?></title>
     <link rel="stylesheet" href="dist/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="config/theme.css">
+    <link rel="stylesheet" href="<?php echo file_exists(__DIR__ . '/custom/theme.css') ? 'custom/theme.css' : 'config/theme.css'; ?>">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: var(--background-color); color: var(--text-color); }
         .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }

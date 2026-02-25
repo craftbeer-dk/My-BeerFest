@@ -47,7 +47,7 @@ $contactEmail = getenv('CONTACT_EMAIL') ?: 'contact@mybeerfest.com';
     <!-- External assets and theme configuration -->
     <link rel="stylesheet" href="dist/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="config/theme.css">
+    <link rel="stylesheet" href="<?php echo file_exists(__DIR__ . '/custom/theme.css') ? 'custom/theme.css' : 'config/theme.css'; ?>">
     
     <style>
         body {
