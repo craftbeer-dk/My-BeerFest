@@ -9,15 +9,20 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST="$SCRIPT_DIR/custom"
 
-mkdir -p "$DEST"
+mkdir -p "$DEST" && chmod 755 "$DEST"
 
 # Copy default theme as a starting point for customization
 if [ ! -f "$DEST/theme.css" ]; then
   cp "$SCRIPT_DIR/src/config/theme.css" "$DEST/theme.css"
+  chmod 644 "$DEST/theme.css"
   echo "Created custom/theme.css (edit to customize theme colors)"
 else
   echo "Skipped custom/theme.css (already exists)"
 fi
+
+# Ensure all files in custom/ are readable by the nginx container
+chmod 755 "$DEST"
+chmod 644 "$DEST"/* 2>/dev/null
 
 # Remind about icon overrides
 echo ""
