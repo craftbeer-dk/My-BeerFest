@@ -24,7 +24,8 @@ function t($key, $default = '') {
 }
 
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: (t('default_festival_title', 'My Beerfest'));
-$themeColor = getenv('THEME_COLOR') ?: '#2B684B';
+require_once __DIR__ . '/config/theme_color.php';
+$themeColor = getThemeColor();
 $translationsJson = json_encode($translations);
 ?>
 <!DOCTYPE html>

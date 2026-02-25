@@ -34,7 +34,8 @@ $festivalInfoText = getenv('FESTIVAL_INFO_TEXT') ?: $translations['default_info_
 $enableStatisticsLogging = getenv('ENABLE_STATISTICS_LOGGING') === 'true';
 $enableMainstyleFiltering = getenv('ENABLE_MAINSTYLE_FILTERING') === 'true';
 $contactEmail = getenv('CONTACT_EMAIL') ?: 'contact@mybeerfest.com';
-$themeColor = getenv('THEME_COLOR') ?: '#2B684B';
+require_once __DIR__ . '/config/theme_color.php';
+$themeColor = getThemeColor();
 $festivalTitleShort = getenv('FESTIVAL_TITLE_SHORT') ?: 'Ølfestival';
 $devMode = getenv('DEV_MODE') === 'true';
 
@@ -337,7 +338,7 @@ $sessionId = $_SESSION['session_id'];
         .toggle-icon.rotated {
             transform: rotate(-90deg);
         }
-        .consent-banner, .update-banner {
+        .consent-banner, .update-banner, .install-banner {
             position: fixed;
             bottom: 0;
             left: 0;
@@ -354,14 +355,14 @@ $sessionId = $_SESSION['session_id'];
             box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
             text-align: center;
         }
-        .consent-banner.hidden, .update-banner.hidden {
+        .consent-banner.hidden, .update-banner.hidden, .install-banner.hidden {
             display: none;
         }
-        .consent-banner p, .update-banner p {
+        .consent-banner p, .update-banner p, .install-banner p {
             margin: 0;
             font-size: 0.9rem;
         }
-        .consent-banner .button-group, .update-banner .button-group {
+        .consent-banner .button-group, .update-banner .button-group, .install-banner .button-group {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
@@ -369,7 +370,7 @@ $sessionId = $_SESSION['session_id'];
             width: 100%;
             flex-shrink: 0;
         }
-        .consent-banner button, .update-banner button {
+        .consent-banner button, .update-banner button, .install-banner button {
             background-color: var(--button-primary-background-color);
             color: white;
             padding: 0.5rem 1rem;
@@ -380,28 +381,28 @@ $sessionId = $_SESSION['session_id'];
             border: none;
             width: auto;
         }
-        .consent-banner button:hover, .update-banner button:hover {
+        .consent-banner button:hover, .update-banner button:hover, .install-banner button:hover {
             background-color: var(--button-primary-hover-bg);
         }
-        .consent-banner .decline-button {
+        .consent-banner .decline-button, .install-banner .decline-button {
             background-color: var(--button-secondary-bg);
         }
-        .consent-banner .decline-button:hover {
+        .consent-banner .decline-button:hover, .install-banner .decline-button:hover {
             background-color: var(--button-secondary-hover-bg);
         }
         @media (min-width: 768px) {
-            .consent-banner, .update-banner {
+            .consent-banner, .update-banner, .install-banner {
                 flex-direction: row;
                 justify-content: flex-end;
                 align-items: center;
                 padding: 1rem 2rem;
                 gap: 2rem;
             }
-            .consent-banner p, .update-banner p {
+            .consent-banner p, .update-banner p, .install-banner p {
                 text-align: right;
                 flex-grow: 0;
             }
-            .consent-banner .button-group, .update-banner .button-group {
+            .consent-banner .button-group, .update-banner .button-group, .install-banner .button-group {
                 width: auto;
             }
         }
@@ -584,6 +585,35 @@ $sessionId = $_SESSION['session_id'];
         <p><?php echo htmlspecialchars($translations['update_available_text'] ?? 'A new version is available.'); ?></p>
         <div class="button-group">
             <button id="update-app-button"><?php echo htmlspecialchars($translations['update_button_text'] ?? 'Update'); ?></button>
+        </div>
+    </div>
+
+    <!-- PWA Install Banner (Android/Desktop) -->
+    <div id="install-banner" class="install-banner hidden">
+        <p><?php echo htmlspecialchars($translations['install_app_text'] ?? 'Install this app on your device for quick access'); ?></p>
+        <div class="button-group">
+            <button id="install-app-button"><?php echo htmlspecialchars($translations['install_app_button'] ?? 'Install'); ?></button>
+            <button id="install-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_app_dismiss'] ?? 'Not now'); ?></button>
+        </div>
+    </div>
+
+    <!-- PWA Install Banner (iOS Safari) -->
+    <div id="install-ios-banner" class="install-banner hidden">
+        <p><?php
+            $iosText = htmlspecialchars($translations['install_ios_text'] ?? 'To install this app, tap {icon} and choose "Add to Home Screen"');
+            $shareIconSvg = '<svg style="display:inline-block;vertical-align:middle;width:1.2em;height:1.2em;margin:0 0.15em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+            echo str_replace('{icon}', $shareIconSvg, $iosText);
+        ?></p>
+        <div class="button-group">
+            <button id="install-ios-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_ios_dismiss'] ?? 'OK'); ?></button>
+        </div>
+    </div>
+
+    <!-- PWA Install Banner (iOS non-Safari) -->
+    <div id="install-ios-safari-banner" class="install-banner hidden">
+        <p><?php echo htmlspecialchars($translations['install_ios_open_safari'] ?? 'To install this app, open it in Safari first'); ?></p>
+        <div class="button-group">
+            <button id="install-ios-safari-dismiss-button" class="decline-button"><?php echo htmlspecialchars($translations['install_ios_dismiss'] ?? 'OK'); ?></button>
         </div>
     </div>
 
@@ -870,6 +900,10 @@ $sessionId = $_SESSION['session_id'];
             }
 
             function populateSelect(selectElement, options) {
+                // Keep the first option ("All …") and remove the rest
+                while (selectElement.options.length > 1) {
+                    selectElement.removeChild(selectElement.lastChild);
+                }
                 options.forEach(option => {
                     const opt = document.createElement('option');
                     opt.value = option;
@@ -1228,34 +1262,76 @@ $sessionId = $_SESSION['session_id'];
             }
 
             // --- Start Application ---
-            Promise.all([
-                fetch(beerDataUrl).then(res => res.json()),
-                fetch('data/flags.json').then(res => res.json())
-            ])
-            .then(([beers, flags]) => {
-                allBeers = beers;
-                countryFlags = flags;
-                lastFetchTimestamp = new Date().getTime();
+            let listenersInitialized = false;
+
+            function bootstrapApp() {
                 processBeerData();
-                
-                initializeAppListeners();
+                if (!listenersInitialized) {
+                    initializeAppListeners();
+                    listenersInitialized = true;
+                }
                 initializeFilters();
                 importDataFromUrlOnLoad();
                 loadState();
-                
+
                 if (enableStatisticsLogging && statsConsent === null) {
                     if(consentBanner) consentBanner.classList.remove('hidden');
                 } else if (enableStatisticsLogging) {
                     updateStatisticsNotice();
                 }
-                
+
                 renderBeers();
                 updateClearButtonState();
                 clearSearchBtn.classList.toggle('hidden', !searchInput.value);
+            }
+
+            // Try to render instantly from cached data (avoids flash of empty page on reload)
+            let bootstrapped = false;
+            try {
+                const cachedBeers = localStorage.getItem('cachedBeers');
+                const cachedFlags = localStorage.getItem('cachedFlags');
+                if (cachedBeers && cachedFlags) {
+                    allBeers = JSON.parse(cachedBeers);
+                    countryFlags = JSON.parse(cachedFlags);
+                    bootstrapped = true;
+                    bootstrapApp();
+                }
+            } catch (e) { /* ignore corrupt cache */ }
+
+            // Fetch fresh data from network (updates cache and re-renders if data changed)
+            Promise.all([
+                fetch(beerDataUrl).then(res => res.json()),
+                fetch('data/flags.json').then(res => res.json())
+            ])
+            .then(([beers, flags]) => {
+                lastFetchTimestamp = new Date().getTime();
+
+                // Save to localStorage for instant render on next load
+                try {
+                    localStorage.setItem('cachedBeers', JSON.stringify(beers));
+                    localStorage.setItem('cachedFlags', JSON.stringify(flags));
+                } catch (e) { /* quota exceeded — not critical */ }
+
+                if (!bootstrapped) {
+                    // First visit (no cache) — full init
+                    allBeers = beers;
+                    countryFlags = flags;
+                    bootstrapApp();
+                } else if (JSON.stringify(beers) !== JSON.stringify(allBeers)) {
+                    // Data changed — update and re-render
+                    allBeers = beers;
+                    countryFlags = flags;
+                    processBeerData();
+                    initializeFilters();
+                    renderBeers();
+                    showMessage(translations['beer_list_updated'] ?? "Beer list updated!", 'success');
+                }
             })
             .catch(error => {
-                console.error('Failed to load initial data:', error);
-                document.getElementById('beer-list').innerHTML = `<div class="error-message">${translations['error_fetching_data'] ?? 'Could not fetch beer data'}</div>`;
+                if (!bootstrapped) {
+                    console.error('Failed to load initial data:', error);
+                    document.getElementById('beer-list').innerHTML = `<div class="error-message">${translations['error_fetching_data'] ?? 'Could not fetch beer data'}</div>`;
+                }
             });
         });
     </script>
@@ -1295,6 +1371,77 @@ $sessionId = $_SESSION['session_id'];
                 });
             }
         }
+
+        // PWA Install Prompt
+        const INSTALL_DISMISS_DAYS = 7;
+        const INSTALL_DISMISS_MS = INSTALL_DISMISS_DAYS * 24 * 60 * 60 * 1000;
+        const INSTALL_SHOW_DELAY = 15000; // 15 seconds
+
+        function isInstallDismissed() {
+            const dismissed = localStorage.getItem('installDismissed');
+            return dismissed && (Date.now() - parseInt(dismissed, 10)) < INSTALL_DISMISS_MS;
+        }
+
+        function showBannerWithDelay(banner) {
+            if (banner) setTimeout(() => banner.classList.remove('hidden'), INSTALL_SHOW_DELAY);
+        }
+
+        // --- Android/Desktop install (beforeinstallprompt) ---
+        let deferredPrompt;
+        const installBanner = document.getElementById('install-banner');
+        const installButton = document.getElementById('install-app-button');
+        const dismissButton = document.getElementById('install-dismiss-button');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (isInstallDismissed()) return;
+            showBannerWithDelay(installBanner);
+        });
+
+        if (installButton) {
+            installButton.addEventListener('click', () => {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(() => {
+                    deferredPrompt = null;
+                    if (installBanner) installBanner.classList.add('hidden');
+                });
+            });
+        }
+
+        if (dismissButton) {
+            dismissButton.addEventListener('click', () => {
+                localStorage.setItem('installDismissed', Date.now().toString());
+                if (installBanner) installBanner.classList.add('hidden');
+            });
+        }
+
+        window.addEventListener('appinstalled', () => {
+            if (installBanner) installBanner.classList.add('hidden');
+            deferredPrompt = null;
+        });
+
+        // --- iOS install guide ---
+        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+        // Safari on iOS: no CriOS (Chrome), no FxiOS (Firefox), no OPiOS (Opera)
+        const isIosSafari = isIos && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
+
+        if (isIos && !isStandalone && !isInstallDismissed()) {
+            if (isIosSafari) {
+                showBannerWithDelay(document.getElementById('install-ios-banner'));
+            } else {
+                showBannerWithDelay(document.getElementById('install-ios-safari-banner'));
+            }
+        }
+
+        document.querySelectorAll('#install-ios-dismiss-button, #install-ios-safari-dismiss-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                localStorage.setItem('installDismissed', Date.now().toString());
+                btn.closest('.install-banner').classList.add('hidden');
+            });
+        });
     </script>
     <?php else: ?>
     <script>
