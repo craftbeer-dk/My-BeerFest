@@ -86,7 +86,7 @@ assert_no_header() {
 # ── Wait for app to be ready ─────────────────────────────────────────
 
 printf "\n\033[1m▸ Waiting for app at %s ...\033[0m\n" "$BASE_URL"
-for i in $(seq 1 15); do
+for _ in $(seq 1 15); do
     if curl -s -o /dev/null -w "" "$BASE_URL/" 2>/dev/null; then
         break
     fi
