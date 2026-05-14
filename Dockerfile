@@ -40,3 +40,6 @@ COPY --from=css-build /build/dist/style.css /var/www/html/dist/style.css
 # Copy nginx config and entrypoint
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 COPY nginx/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["sh", "/entrypoint.sh"]

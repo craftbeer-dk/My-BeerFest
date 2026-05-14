@@ -1,0 +1,15 @@
+# Development overlay: builds images locally instead of pulling from GHCR.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+services:
+  nginx:
+    build:
+      context: .
+      target: nginx
+    pull_policy: never
+
+  php:
+    build:
+      context: .
+      target: php
+    pull_policy: never

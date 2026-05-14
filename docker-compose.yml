@@ -1,16 +1,12 @@
 
 services:
   nginx:
-    build:
-      context: .
-      target: nginx
+    image: ghcr.io/craftbeer-dk/my-beerfest-nginx:latest
     restart: unless-stopped
     ports:
       - "${PORT:-8181}:80"
     volumes:
       - ./custom:/var/www/html/custom:ro
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
     environment:
       STATS_USER: ${STATS_USER}
       STATS_PASSWORD: ${STATS_PASSWORD}
@@ -21,12 +17,9 @@ services:
         condition: service_started
     networks:
       - beer_festival_network
-    entrypoint: ["sh", "/entrypoint.sh"]
 
   php:
-    build:
-      context: .
-      target: php
+    image: ghcr.io/craftbeer-dk/my-beerfest-php:latest
     restart: unless-stopped
     volumes:
       - ./custom:/var/www/html/custom:ro
