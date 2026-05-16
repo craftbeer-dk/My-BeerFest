@@ -11,6 +11,7 @@ A Progressive Web App for beer festival management. Users can browse, filter, se
 - **Admin panel** — manage beer catalog via `/admin.php` (auth-protected)
 - **PWA & offline** — installable, Service Worker caches app shell and data
 - **Multi-language** — Danish, English, Swedish, Norwegian, German, French, Polish, Czech - Admin endpoints is only in English
+- **Coming-soon mode** — gate the public site behind a localized "not yet brewed" page with optional countdown; share a `?key=…` preview link to grant stakeholders cookie-based bypass
 - **Privacy-first** — no database, no server sessions, server logging is opt-in only
 
 ## Quick Start
@@ -50,6 +51,10 @@ Environment variables are defined in a `.env` file in the project root (see `.en
 | `FESTIVAL_INFO_TEXT` | Custom info text in the app | _(none)_ |
 | `CONTACT_EMAIL` | Email shown in privacy policy | _(none)_ |
 | `DEV_MODE` | Disable Service Worker for development | `false` |
+| `NOT_PUBLIC` | Gate the main page behind a "coming soon" view | `false` |
+| `NOT_PUBLIC_BYPASS_KEY` | Shared secret for `?key=…` preview links (sets a 30-day cookie). Empty disables bypass. | _(none)_ |
+| `FESTIVAL_DATE` | RFC3339 timestamp the countdown counts down to (e.g. `2026-06-15T18:00:00+02:00`) | _(none)_ |
+| `SHOW_COUNTDOWN` | Render the countdown on the coming-soon page | `false` |
 | `STATS_USER` / `STATS_PASSWORD` | Basic auth for `/stats.php` (nginx) | `stats` / `changeme` |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | Basic auth for `/admin.php` and `/admin_api.php` (nginx) | `admin` / `changeme` |
 

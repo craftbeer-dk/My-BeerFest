@@ -1,6 +1,14 @@
 // Service Worker for PWA functionality (caching and offline support)
 
-const CACHE_NAME = 'beerfest-cache-v5'; // Increment cache version to force update
+const CACHE_NAME = 'beerfest-cache-v6'; // Increment cache version to force update
+
+// Skip caching responses the server explicitly marks as private/no-store —
+// otherwise a bypassed index.php (NOT_PUBLIC mode) could be stored and served
+// later to a visitor who doesn't hold the preview cookie.
+function shouldCache(response) {
+    const cc = response.headers.get('Cache-Control') || '';
+    return !/no-store|private/i.test(cc);
+}
 // These are the core files that make up the app's "shell".
 const APP_SHELL_URLS = [
   '/',
@@ -77,7 +85,9 @@ self.addEventListener('fetch', event => {
       caches.open(CACHE_NAME).then(cache => {
         return cache.match(event.request).then(cachedResponse => {
           const networkFetch = fetch(event.request).then(networkResponse => {
-            cache.put(event.request, networkResponse.clone());
+            if (shouldCache(networkResponse)) {
+              cache.put(event.request, networkResponse.clone());
+            }
             return networkResponse;
           });
           if (cachedResponse) {
@@ -100,7 +110,9 @@ self.addEventListener('fetch', event => {
         return fetch(event.request)
           .then(networkResponse => {
             // If we get a fresh response from the network, update the cache
-            cache.put(event.request, networkResponse.clone());
+            if (shouldCache(networkResponse)) {
+              cache.put(event.request, networkResponse.clone());
+            }
             return networkResponse;
           })
           .catch(() => {
@@ -119,7 +131,9 @@ self.addEventListener('fetch', event => {
     caches.open(CACHE_NAME).then(cache => {
       return cache.match(event.request).then(cachedResponse => {
         const networkFetch = fetch(event.request).then(networkResponse => {
-          cache.put(event.request, networkResponse.clone());
+          if (shouldCache(networkResponse)) {
+            cache.put(event.request, networkResponse.clone());
+          }
           return networkResponse;
         });
         if (cachedResponse) {

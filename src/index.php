@@ -39,6 +39,46 @@ $themeColor = getThemeColor();
 $festivalTitleShort = getenv('FESTIVAL_TITLE_SHORT') ?: 'Ølfestival';
 $devMode = getenv('DEV_MODE') === 'true';
 
+// "Not public yet" gate. When NOT_PUBLIC=true, visitors see coming-soon.php
+// unless they hold a valid bypass cookie (set via ?key=<secret>).
+$notPublic = getenv('NOT_PUBLIC') === 'true';
+if ($notPublic) {
+    $bypassKey = getenv('NOT_PUBLIC_BYPASS_KEY') ?: '';
+    $cookieName = 'bf_preview';
+    $expectedToken = $bypassKey !== '' ? hash_hmac('sha256', 'preview', $bypassKey) : '';
+    // X-Forwarded-Proto check because PHP-FPM behind nginx rarely sees $_SERVER['HTTPS'].
+    $isHttps = (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+
+    if (!empty($_GET['key']) && $bypassKey !== ''
+        && hash_equals($bypassKey, (string)$_GET['key'])) {
+        setcookie($cookieName, $expectedToken, [
+            'expires'  => time() + 30 * 24 * 3600,
+            'path'     => '/',
+            'httponly' => true,
+            'samesite' => 'Lax',
+            'secure'   => $isHttps,
+        ]);
+        header('Location: /');
+        exit;
+    }
+
+    $hasBypass = $expectedToken !== ''
+        && !empty($_COOKIE[$cookieName])
+        && hash_equals($expectedToken, (string)$_COOKIE[$cookieName]);
+
+    if (!$hasBypass) {
+        header('Cache-Control: no-store');
+        $festivalDate = getenv('FESTIVAL_DATE') ?: '';
+        $showCountdown = getenv('SHOW_COUNTDOWN') === 'true';
+        define('BEERFEST_GATE_RENDER', true);
+        include __DIR__ . '/coming-soon.php';
+        exit;
+    }
+
+    header('Cache-Control: private, no-store');
+}
+
 // Prepare PHP data for injection into JavaScript.
 $translationsJson = json_encode($translations);
 $sessionId = $_SESSION['session_id'];
@@ -1335,7 +1375,7 @@ $sessionId = $_SESSION['session_id'];
             });
         });
     </script>
-    <?php if (!$devMode): ?>
+    <?php if (!$devMode && !$notPublic): ?>
     <script>
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
@@ -1445,7 +1485,8 @@ $sessionId = $_SESSION['session_id'];
     </script>
     <?php else: ?>
     <script>
-        // DEV_MODE: Unregister any existing service worker to avoid stale caches
+        // DEV_MODE or NOT_PUBLIC: unregister any existing service worker so a stale
+        // pre-gate or bypass-only shell can't be served to other visitors from cache.
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(registrations => {
                 registrations.forEach(reg => reg.unregister());
