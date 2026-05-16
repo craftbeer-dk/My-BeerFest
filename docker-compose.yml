@@ -38,9 +38,13 @@ services:
       UNTAPPD_RATE_WINDOW: ${UNTAPPD_RATE_WINDOW}
       UNTAPPD_RATE_MAX: ${UNTAPPD_RATE_MAX}
       UNTAPPD_RATE_COOLDOWN: ${UNTAPPD_RATE_COOLDOWN}
+      NOT_PUBLIC: ${NOT_PUBLIC}
+      NOT_PUBLIC_BYPASS_KEY: ${NOT_PUBLIC_BYPASS_KEY}
+      FESTIVAL_DATE: ${FESTIVAL_DATE}
+      SHOW_COUNTDOWN: ${SHOW_COUNTDOWN}
     networks:
       - beer_festival_network
-    command: sh -c 'for v in DOMAIN FESTIVAL_TITLE FESTIVAL_TITLE_SHORT APP_LANGUAGE ENABLE_MAINSTYLE_FILTERING FESTIVAL_INFO_TEXT ENABLE_STATISTICS_LOGGING CONTACT_EMAIL DEV_MODE UNTAPPD_RATE_WINDOW UNTAPPD_RATE_MAX UNTAPPD_RATE_COOLDOWN; do val=$$(printenv "$$v" 2>/dev/null || true); [ -n "$$val" ] && printf "env[%s] = \"%s\"\n" "$$v" "$$val" >> /usr/local/etc/php-fpm.d/www.conf; done && mkdir -p /var/log/mybeerfest && chown -R www-data:www-data /var/log/mybeerfest && chown -R www-data:www-data /var/www/html/data && php-fpm'
+    command: sh -c 'for v in DOMAIN FESTIVAL_TITLE FESTIVAL_TITLE_SHORT APP_LANGUAGE ENABLE_MAINSTYLE_FILTERING FESTIVAL_INFO_TEXT ENABLE_STATISTICS_LOGGING CONTACT_EMAIL DEV_MODE UNTAPPD_RATE_WINDOW UNTAPPD_RATE_MAX UNTAPPD_RATE_COOLDOWN NOT_PUBLIC NOT_PUBLIC_BYPASS_KEY FESTIVAL_DATE SHOW_COUNTDOWN; do val=$$(printenv "$$v" 2>/dev/null || true); [ -n "$$val" ] && printf "env[%s] = \"%s\"\n" "$$v" "$$val" >> /usr/local/etc/php-fpm.d/www.conf; done && mkdir -p /var/log/mybeerfest && chown -R www-data:www-data /var/log/mybeerfest && chown -R www-data:www-data /var/www/html/data && php-fpm'
 
 networks:
   beer_festival_network:
