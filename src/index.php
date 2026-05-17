@@ -1339,9 +1339,13 @@ $sessionId = $_SESSION['session_id'];
             } catch (e) { /* ignore corrupt cache */ }
 
             // Fetch fresh data from network (updates cache and re-renders if data changed)
+            const asJson = res => {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            };
             Promise.all([
-                fetch(beerDataUrl).then(res => res.json()),
-                fetch('data/flags.json').then(res => res.json())
+                fetch(beerDataUrl).then(asJson),
+                fetch('data/flags.json').then(asJson)
             ])
             .then(([beers, flags]) => {
                 lastFetchTimestamp = new Date().getTime();
