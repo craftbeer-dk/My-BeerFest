@@ -17,6 +17,13 @@ $messageTemplate = $translations['coming_soon_message']
     <meta name="theme-color" content="<?php echo htmlspecialchars($themeColor); ?>">
     <title><?php echo htmlspecialchars($festivalTitle); ?></title>
 
+    <link rel="manifest" href="manifest.php">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="<?php echo htmlspecialchars($festivalTitleShort); ?>">
+    <link rel="apple-touch-icon" href="<?php echo file_exists(__DIR__ . '/custom/icon-192.png') ? 'custom/icon-192.png' : 'images/icon-192.png'; ?>">
+    <link rel="apple-touch-icon" sizes="512x512" href="<?php echo file_exists(__DIR__ . '/custom/icon-512.png') ? 'custom/icon-512.png' : 'images/icon-512.png'; ?>">
+
     <link rel="stylesheet" href="dist/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo file_exists(__DIR__ . '/custom/theme.css') ? 'custom/theme.css' : 'config/theme.css'; ?>">

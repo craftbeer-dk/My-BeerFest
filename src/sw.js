@@ -1,149 +1,179 @@
 // Service Worker for PWA functionality (caching and offline support)
 
-const CACHE_NAME = 'beerfest-cache-v6'; // Increment cache version to force update
+const CACHE_NAME = 'beerfest-cache-v8';
 
-// Skip caching responses the server explicitly marks as private/no-store —
-// otherwise a bypassed index.php (NOT_PUBLIC mode) could be stored and served
-// later to a visitor who doesn't hold the preview cookie.
-function shouldCache(response) {
-    const cc = response.headers.get('Cache-Control') || '';
-    return !/no-store|private/i.test(cc);
-}
-// These are the core files that make up the app's "shell".
+// Files pre-cached on install so the app shell loads offline on first launch.
+// "/" is the canonical app entry — index.php is served at "/" by nginx, so
+// caching both would just duplicate the same response under two keys.
 const APP_SHELL_URLS = [
   '/',
-  'index.php',
-  'config/theme.css',
-  'dist/style.css',
-  'manifest.php',
-  'my_stats.php'
+  '/config/theme.css',
+  '/dist/style.css',
 ];
-// These are the data files we want to have available offline.
+
+// Data files pre-cached so beer listings are available offline immediately.
 const DATA_URLS = [
-    '/data/beers.json',
-    '/data/flags.json'
+  '/data/beers.json',
+  '/data/flags.json',
 ];
 
-// Install event: triggered when the service worker is first installed.
+// Auth-protected pages — let the browser handle these natively so basic-auth
+// prompts work and we never cache credentials-bearing responses.
+const AUTH_PATHS = new Set([
+  '/stats.php', '/stats',
+  '/admin.php', '/admin',
+  '/admin_api.php', '/admin_api',
+]);
+
+// Decide whether a response is safe to cache.
+//   - opaque responses (cross-origin no-cors, e.g. gstatic fonts) are kept
+//   - non-2xx is never cached so 404s and 5xx aren't pinned
+//   - no-store/private is never cached (handles the NOT_PUBLIC gate page)
+function shouldCache(response) {
+  if (!response) return false;
+  if (response.type === 'opaque') return true;
+  if (!response.ok) return false;
+  const cc = response.headers.get('Cache-Control') || '';
+  return !/no-store|private/i.test(cc);
+}
+
+// Install: pre-cache the app shell with per-URL fetches + shouldCache filter.
+// Using Promise.allSettled (instead of cache.addAll) means a single 404 won't
+// fail the whole install, and a no-store gate-mode response won't be pinned.
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache and caching app shell and initial data');
-        // Cache the app shell and the initial data together.
-        return cache.addAll([...APP_SHELL_URLS, ...DATA_URLS]);
-      })
-  );
-});
-
-// Activate event: triggered when the service worker is activated.
-// This is a good place to clean up old caches.
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      ).then(() => {
-        // Take control of all open clients once the old cache is cleared.
-        return self.clients.claim();
-      });
-    })
-  );
-});
-
-// Listen for a message from the client to activate the new service worker.
-self.addEventListener('message', event => {
-  if (event.data && event.data.action === 'skipWaiting') {
-    self.skipWaiting();
-  }
-});
-
-
-// Fetch event: triggered for every network request made by the page.
-self.addEventListener('fetch', event => {
-  // Only handle GET requests — let POST/PUT/DELETE go straight to network
-  if (event.request.method !== 'GET') return;
-
-  const requestUrl = new URL(event.request.url);
-
-  // Let the browser handle auth-protected pages directly (basic auth requires native handling)
-  if (requestUrl.pathname === '/stats.php' || requestUrl.pathname === '/stats' ||
-      requestUrl.pathname === '/admin.php' || requestUrl.pathname === '/admin' ||
-      requestUrl.pathname === '/admin_api.php' || requestUrl.pathname === '/admin_api') {
-    return;
-  }
-
-  // Strategy: Stale-While-Revalidate for Google Fonts (cached for offline support)
-  if (requestUrl.origin === 'https://fonts.googleapis.com' ||
-      requestUrl.origin === 'https://fonts.gstatic.com') {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(cache => {
-        return cache.match(event.request).then(cachedResponse => {
-          const networkFetch = fetch(event.request).then(networkResponse => {
-            if (shouldCache(networkResponse)) {
-              cache.put(event.request, networkResponse.clone());
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.allSettled(
+        [...APP_SHELL_URLS, ...DATA_URLS].map(url =>
+          fetch(url, { cache: 'reload' }).then(response => {
+            if (shouldCache(response)) {
+              return cache.put(url, response);
             }
-            return networkResponse;
-          });
-          if (cachedResponse) {
-            networkFetch.catch(() => {});
-            return cachedResponse;
-          }
-          return networkFetch;
-        });
-      })
+          })
+        )
+      )
+    )
+  );
+});
+
+// Activate: drop old caches, enable Navigation Preload, claim open tabs.
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    if (self.registration.navigationPreload) {
+      await self.registration.navigationPreload.enable();
+    }
+    const names = await caches.keys();
+    await Promise.all(
+      names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n))
+    );
+    await self.clients.claim();
+  })());
+});
+
+// Stale-while-revalidate: serve cache instantly, refresh in background.
+// Evicts the cached entry when the network response is no-store/private so
+// a NOT_PUBLIC toggle self-heals on the next request.
+function staleWhileRevalidate(request, cache) {
+  return cache.match(request).then(cachedResponse => {
+    const networkFetch = fetch(request).then(networkResponse => {
+      if (shouldCache(networkResponse)) {
+        cache.put(request, networkResponse.clone());
+      } else {
+        cache.delete(request);
+      }
+      return networkResponse;
+    });
+    if (cachedResponse) {
+      networkFetch.catch(() => {});
+      return cachedResponse;
+    }
+    return networkFetch;
+  });
+}
+
+self.addEventListener('fetch', event => {
+  // Only intercept GETs over http(s). Skip POST/PUT/DELETE and exotic schemes
+  // like chrome-extension:// (cache.put rejects for non-http(s)).
+  if (event.request.method !== 'GET') return;
+  const requestUrl = new URL(event.request.url);
+  if (!requestUrl.protocol.startsWith('http')) return;
+
+  if (AUTH_PATHS.has(requestUrl.pathname)) return;
+
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  const isFonts = requestUrl.origin === 'https://fonts.googleapis.com'
+               || requestUrl.origin === 'https://fonts.gstatic.com';
+
+  // Google Fonts: stale-while-revalidate so fonts work offline.
+  if (isFonts) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(cache => staleWhileRevalidate(event.request, cache))
     );
     return;
   }
 
-  // Strategy: Network First, falling back to Cache for Data files
-  // This ensures users get fresh data if online, but the app still works offline
-  // because the data was pre-cached during the install event.
-  if (requestUrl.pathname.includes('/data/')) {
+  // Don't intercept other cross-origin requests — keeps our cache lean and
+  // avoids accidentally caching third-party scripts/pixels.
+  if (!isSameOrigin) return;
+
+  // Data files: network-first, cache fallback for offline.
+  if (requestUrl.pathname.startsWith('/data/')) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(cache => {
-        return fetch(event.request)
+      caches.open(CACHE_NAME).then(cache =>
+        fetch(event.request)
           .then(networkResponse => {
-            // If we get a fresh response from the network, update the cache
             if (shouldCache(networkResponse)) {
               cache.put(event.request, networkResponse.clone());
+            } else {
+              cache.delete(event.request);
             }
             return networkResponse;
           })
-          .catch(() => {
-            // If the network fails, return the cached version.
-            return cache.match(event.request);
-          });
-      })
+          .catch(() => cache.match(event.request))
+      )
     );
     return;
   }
 
-  // Strategy: Stale-While-Revalidate for app shell and other assets.
-  // Serves instantly from cache, then refreshes in the background so the
-  // next visit always has up-to-date content without needing a SW version bump.
-  event.respondWith(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.match(event.request).then(cachedResponse => {
-        const networkFetch = fetch(event.request).then(networkResponse => {
-          if (shouldCache(networkResponse)) {
-            cache.put(event.request, networkResponse.clone());
-          }
-          return networkResponse;
-        });
-        if (cachedResponse) {
-          // Serve from cache immediately, update in background
-          networkFetch.catch(() => {});
-          return cachedResponse;
+  // Document navigations: cache-first with preload-backed revalidation, and
+  // an app-shell fallback when both cache and network are unavailable.
+  if (event.request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cachedResponse = await cache.match(event.request);
+
+      const networkFetch = (async () => {
+        const preload = event.preloadResponse ? await event.preloadResponse : null;
+        const networkResponse = preload || await fetch(event.request);
+        if (shouldCache(networkResponse)) {
+          cache.put(event.request, networkResponse.clone());
+        } else {
+          cache.delete(event.request);
         }
-        // No cache hit — wait for network
-        return networkFetch;
-      });
-    })
+        return networkResponse;
+      })();
+
+      if (cachedResponse) {
+        networkFetch.catch(() => {});
+        return cachedResponse;
+      }
+      try {
+        return await networkFetch;
+      } catch {
+        const shell = await cache.match('/');
+        if (shell) return shell;
+        return new Response('Offline', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      }
+    })());
+    return;
+  }
+
+  // Everything else (same-origin assets): stale-while-revalidate.
+  event.respondWith(
+    caches.open(CACHE_NAME).then(cache => staleWhileRevalidate(event.request, cache))
   );
 });
