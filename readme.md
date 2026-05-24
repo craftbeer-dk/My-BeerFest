@@ -184,11 +184,10 @@ The app checks for custom icons first and falls back to the defaults in `src/ima
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [Elastic License 2.0 (ELv2)](LICENSE.md) — a source-available license.
 
-**Special Commercial Use Clause:**
-This application is intended for use by individual beer festival organizers for their own events.
+You **may**: use, copy, modify, and distribute the software, including running it commercially for your own beer festival.
 
-You **may**: use it for your own festival, modify it, and share it non-commercially.
+You may **not**: provide the software to third parties as a hosted or managed service (e.g. offering it to other festival organizers as a paid platform). You also may not remove or alter the license, copyright, or other notices.
 
-You may **not**: sell, sublicense, or offer it as a paid service to other festival organizers. Contact the original author for a separate commercial license.
+For uses outside these terms, contact the author for a separate commercial license.
