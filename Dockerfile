@@ -11,7 +11,7 @@ COPY src/ ./src/
 RUN npx tailwindcss -i src/input.css -o dist/style.css --minify
 
 # Stage 2: PHP-FPM Image
-FROM php:8.2-fpm-alpine AS php
+FROM php:8.5-fpm-alpine AS php
 
 # Install system dependencies
 RUN apk add --no-cache curl gnupg
