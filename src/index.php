@@ -282,10 +282,10 @@ $sessionId = $_SESSION['session_id'];
             }
         }
         .error-message {
-            background-color: #fef2f2;
-            color: #ef4444;
+            background-color: var(--error-background-color, #fef2f2);
+            color: var(--error-text-color, #ef4444);
             padding: 1rem;
-            border: 1px solid #fca5a5;
+            border: 1px solid var(--error-border-color, #fca5a5);
             border-radius: 0.5rem;
             margin-bottom: 1rem;
         }
