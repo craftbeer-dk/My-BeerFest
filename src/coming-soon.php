@@ -17,6 +17,27 @@ $messageTemplate = $translations['coming_soon_message']
     <meta name="theme-color" content="<?php echo htmlspecialchars($themeColor); ?>">
     <title><?php echo htmlspecialchars($festivalTitle); ?></title>
 
+    <!-- SEO / social share -->
+    <meta name="description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
+<?php if ($canonicalUrl !== ''): ?>
+    <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl); ?>">
+<?php endif; ?>
+    <meta property="og:title" content="<?php echo htmlspecialchars($festivalTitle); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="<?php echo htmlspecialchars($festivalTitle); ?>">
+    <meta property="og:locale" content="<?php echo htmlspecialchars($ogLocale); ?>">
+<?php if ($canonicalUrl !== ''): ?>
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl); ?>">
+<?php endif; ?>
+    <meta property="og:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
+    <meta property="og:image:width" content="512">
+    <meta property="og:image:height" content="512">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($festivalTitle); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
+
     <link rel="manifest" href="manifest.php">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

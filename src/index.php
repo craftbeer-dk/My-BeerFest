@@ -39,6 +39,29 @@ $themeColor = getThemeColor();
 $festivalTitleShort = getenv('FESTIVAL_TITLE_SHORT') ?: 'Ølfestival';
 $devMode = getenv('DEV_MODE') === 'true';
 
+$festivalSeoDescription = getenv('FESTIVAL_SEO_DESCRIPTION') ?: $festivalInfoText;
+
+$envDomain = getenv('DOMAIN') ?: '';
+if ($envDomain !== '') {
+    $siteUrlBase = preg_match('#^https?://#', $envDomain)
+        ? rtrim($envDomain, '/')
+        : 'https://' . rtrim($envDomain, '/');
+} else {
+    $isHttpsCanonical = (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $siteUrlBase = $host !== '' ? ($isHttpsCanonical ? 'https://' : 'http://') . $host : '';
+}
+$ogImagePath = file_exists(__DIR__ . '/custom/icon-512.png') ? '/custom/icon-512.png' : '/images/icon-512.png';
+$ogImageUrl = $siteUrlBase !== '' ? $siteUrlBase . $ogImagePath : ltrim($ogImagePath, '/');
+$canonicalUrl = $siteUrlBase !== '' ? $siteUrlBase . '/' : '';
+
+$ogLocaleMap = [
+    'da' => 'da_DK', 'en' => 'en_US', 'sv' => 'sv_SE', 'no' => 'nb_NO',
+    'de' => 'de_DE', 'fr' => 'fr_FR', 'pl' => 'pl_PL', 'cs' => 'cs_CZ',
+];
+$ogLocale = $ogLocaleMap[$appLanguage] ?? 'en_US';
+
 // "Not public yet" gate. When NOT_PUBLIC=true, visitors see coming-soon.php
 // unless they hold a valid bypass cookie (set via ?key=<secret>).
 $notPublic = getenv('NOT_PUBLIC') === 'true';
@@ -89,7 +112,28 @@ $sessionId = $_SESSION['session_id'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($festivalTitle); ?></title>
-    
+
+    <!-- SEO / social share -->
+    <meta name="description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
+<?php if ($canonicalUrl !== ''): ?>
+    <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl); ?>">
+<?php endif; ?>
+    <meta property="og:title" content="<?php echo htmlspecialchars($festivalTitle); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="<?php echo htmlspecialchars($festivalTitle); ?>">
+    <meta property="og:locale" content="<?php echo htmlspecialchars($ogLocale); ?>">
+<?php if ($canonicalUrl !== ''): ?>
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl); ?>">
+<?php endif; ?>
+    <meta property="og:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
+    <meta property="og:image:width" content="512">
+    <meta property="og:image:height" content="512">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($festivalTitle); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
+
     <!-- PWA Manifest and Theme Color -->
     <link rel="manifest" href="manifest.php">
     <meta name="theme-color" content="<?php echo htmlspecialchars($themeColor); ?>">
