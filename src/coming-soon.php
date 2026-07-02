@@ -38,6 +38,8 @@ $messageTemplate = $translations['coming_soon_message']
     <meta name="twitter:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
     <meta name="twitter:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
 
+    <?= $jsonLdScript ?>
+
     <link rel="manifest" href="manifest.php">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -138,7 +140,7 @@ $messageTemplate = $translations['coming_soon_message']
             <?php echo htmlspecialchars($festivalTitle); ?>
         </h1>
 
-        <div class="coming-soon-card">
+        <div class="coming-soon-card" data-nosnippet>
             <p class="coming-soon-message">
                 <?php echo htmlspecialchars(sprintf($messageTemplate, $festivalTitle)); ?>
             </p>
