@@ -105,6 +105,19 @@ if ($notPublic) {
 // Prepare PHP data for injection into JavaScript.
 $translationsJson = json_encode($translations);
 $sessionId = $_SESSION['session_id'];
+
+// SSR fallback for #beer-list — visible to non-JS crawlers (Bing, DuckDuckGo,
+// most LLM fetchers). Client JS wipes this container on its first render
+// (see beerListContainer.innerHTML = '' below), so JS-enabled users never
+// see it. Placed after the NOT_PUBLIC gate so it can't leak while gated.
+$ssrBeers = [];
+$beersFile = __DIR__ . '/data/beers.json';
+if (is_readable($beersFile)) {
+    $decoded = json_decode(file_get_contents($beersFile), true);
+    if (is_array($decoded)) {
+        $ssrBeers = $decoded;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars($appLanguage); ?>">
@@ -133,6 +146,33 @@ $sessionId = $_SESSION['session_id'];
     <meta name="twitter:title" content="<?php echo htmlspecialchars($festivalTitle); ?>">
     <meta name="twitter:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
     <meta name="twitter:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
+
+<?php
+    $festivalLocation = getenv('FESTIVAL_LOCATION') ?: '';
+    $festivalDate     = getenv('FESTIVAL_DATE') ?: '';
+    $festivalEndDate  = getenv('FESTIVAL_END_DATE') ?: '';
+
+    $jsonLd = [
+        '@context' => 'https://schema.org',
+        '@type'    => 'Event',
+        'name'     => $festivalTitle,
+    ];
+    if ($festivalSeoDescription !== '')  { $jsonLd['description'] = $festivalSeoDescription; }
+    if ($festivalDate !== '')            { $jsonLd['startDate']   = $festivalDate; }
+    if ($festivalEndDate !== '')         { $jsonLd['endDate']     = $festivalEndDate; }
+    if ($canonicalUrl !== '')            { $jsonLd['url']         = $canonicalUrl; }
+    if ($ogImageUrl !== '')              { $jsonLd['image']       = $ogImageUrl; }
+    $jsonLd['eventStatus']         = 'https://schema.org/EventScheduled';
+    $jsonLd['eventAttendanceMode'] = 'https://schema.org/OfflineEventAttendanceMode';
+    if ($festivalLocation !== '') {
+        $jsonLd['location'] = ['@type' => 'Place', 'name' => $festivalLocation];
+    }
+    $organizer = ['@type' => 'Organization', 'name' => $festivalTitle];
+    if ($contactEmail !== '') { $organizer['email'] = $contactEmail; }
+    if ($canonicalUrl !== '') { $organizer['url']   = $canonicalUrl; }
+    $jsonLd['organizer'] = $organizer;
+?>
+    <script type="application/ld+json"><?= json_encode($jsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
 
     <!-- PWA Manifest and Theme Color -->
     <link rel="manifest" href="manifest.php">
@@ -630,7 +670,23 @@ $sessionId = $_SESSION['session_id'];
         </div>
 
         <div id="beer-list" class="beer-grid">
-            <!-- Beer cards will be loaded here by JavaScript -->
+<?php foreach ($ssrBeers as $beer): ?>
+            <article class="beer-card">
+                <h2><?= htmlspecialchars($beer['name'] ?? '') ?></h2>
+<?php if (!empty($beer['brewery'])): ?>
+                <p><?= htmlspecialchars($beer['brewery']) ?></p>
+<?php endif; ?>
+<?php
+                $meta = [];
+                if (!empty($beer['alc']))     { $meta[] = htmlspecialchars($beer['alc']) . '%'; }
+                if (!empty($beer['style']))   { $meta[] = htmlspecialchars($beer['style']); }
+                if (!empty($beer['country'])) { $meta[] = htmlspecialchars($beer['country']); }
+                if (!empty($beer['session'])) { $meta[] = htmlspecialchars($beer['session']); }
+                if ($meta): ?>
+                <p><?= implode(' &middot; ', $meta) ?></p>
+<?php endif; ?>
+            </article>
+<?php endforeach; ?>
         </div>
 
         <!-- Load More Button -->
