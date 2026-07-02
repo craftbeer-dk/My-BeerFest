@@ -62,6 +62,36 @@ $ogLocaleMap = [
 ];
 $ogLocale = $ogLocaleMap[$appLanguage] ?? 'en_US';
 
+// Build the JSON-LD Event schema before the gate check so both index.php's
+// main render and coming-soon.php can emit it. Rich results / AI-agent
+// discovery are arguably more valuable while the site is in coming-soon.
+$festivalLocation = getenv('FESTIVAL_LOCATION') ?: '';
+$festivalDate     = getenv('FESTIVAL_DATE') ?: '';
+$festivalEndDate  = getenv('FESTIVAL_END_DATE') ?: '';
+
+$jsonLd = [
+    '@context' => 'https://schema.org',
+    '@type'    => 'Event',
+    'name'     => $festivalTitle,
+];
+if ($festivalSeoDescription !== '')  { $jsonLd['description'] = $festivalSeoDescription; }
+if ($festivalDate !== '')            { $jsonLd['startDate']   = $festivalDate; }
+if ($festivalEndDate !== '')         { $jsonLd['endDate']     = $festivalEndDate; }
+if ($canonicalUrl !== '')            { $jsonLd['url']         = $canonicalUrl; }
+if ($ogImageUrl !== '')              { $jsonLd['image']       = $ogImageUrl; }
+$jsonLd['eventStatus']         = 'https://schema.org/EventScheduled';
+$jsonLd['eventAttendanceMode'] = 'https://schema.org/OfflineEventAttendanceMode';
+if ($festivalLocation !== '') {
+    $jsonLd['location'] = ['@type' => 'Place', 'name' => $festivalLocation];
+}
+$organizer = ['@type' => 'Organization', 'name' => $festivalTitle];
+if ($contactEmail !== '') { $organizer['email'] = $contactEmail; }
+if ($canonicalUrl !== '') { $organizer['url']   = $canonicalUrl; }
+$jsonLd['organizer'] = $organizer;
+$jsonLdScript = '<script type="application/ld+json">'
+    . json_encode($jsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+    . '</script>';
+
 // "Not public yet" gate. When NOT_PUBLIC=true, visitors see coming-soon.php
 // unless they hold a valid bypass cookie (set via ?key=<secret>).
 $notPublic = getenv('NOT_PUBLIC') === 'true';
@@ -147,32 +177,7 @@ if (is_readable($beersFile)) {
     <meta name="twitter:description" content="<?php echo htmlspecialchars($festivalSeoDescription); ?>">
     <meta name="twitter:image" content="<?php echo htmlspecialchars($ogImageUrl); ?>">
 
-<?php
-    $festivalLocation = getenv('FESTIVAL_LOCATION') ?: '';
-    $festivalDate     = getenv('FESTIVAL_DATE') ?: '';
-    $festivalEndDate  = getenv('FESTIVAL_END_DATE') ?: '';
-
-    $jsonLd = [
-        '@context' => 'https://schema.org',
-        '@type'    => 'Event',
-        'name'     => $festivalTitle,
-    ];
-    if ($festivalSeoDescription !== '')  { $jsonLd['description'] = $festivalSeoDescription; }
-    if ($festivalDate !== '')            { $jsonLd['startDate']   = $festivalDate; }
-    if ($festivalEndDate !== '')         { $jsonLd['endDate']     = $festivalEndDate; }
-    if ($canonicalUrl !== '')            { $jsonLd['url']         = $canonicalUrl; }
-    if ($ogImageUrl !== '')              { $jsonLd['image']       = $ogImageUrl; }
-    $jsonLd['eventStatus']         = 'https://schema.org/EventScheduled';
-    $jsonLd['eventAttendanceMode'] = 'https://schema.org/OfflineEventAttendanceMode';
-    if ($festivalLocation !== '') {
-        $jsonLd['location'] = ['@type' => 'Place', 'name' => $festivalLocation];
-    }
-    $organizer = ['@type' => 'Organization', 'name' => $festivalTitle];
-    if ($contactEmail !== '') { $organizer['email'] = $contactEmail; }
-    if ($canonicalUrl !== '') { $organizer['url']   = $canonicalUrl; }
-    $jsonLd['organizer'] = $organizer;
-?>
-    <script type="application/ld+json"><?= json_encode($jsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
+    <?= $jsonLdScript ?>
 
     <!-- PWA Manifest and Theme Color -->
     <link rel="manifest" href="manifest.php">
