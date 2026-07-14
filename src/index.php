@@ -148,6 +148,26 @@ if (is_readable($beersFile)) {
         $ssrBeers = $decoded;
     }
 }
+
+// Optional tasting routes — curated, ordered beer lists (data/routes.json).
+// Absent/invalid file simply hides the feature. Only well-formed entries are kept.
+$routes = [];
+$routesFile = __DIR__ . '/data/routes.json';
+if (is_readable($routesFile)) {
+    $decodedRoutes = json_decode(file_get_contents($routesFile), true);
+    if (is_array($decodedRoutes)) {
+        foreach ($decodedRoutes as $r) {
+            if (is_array($r) && isset($r['name']) && is_string($r['name']) && $r['name'] !== ''
+                && isset($r['beers']) && is_array($r['beers'])) {
+                $routes[] = [
+                    'name'    => $r['name'],
+                    'session' => (isset($r['session']) && is_string($r['session'])) ? $r['session'] : '',
+                    'beers'   => array_values(array_filter($r['beers'], 'is_string')),
+                ];
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars($appLanguage); ?>">
@@ -587,6 +607,14 @@ if (is_readable($beersFile)) {
                             <option value=""><?php echo htmlspecialchars($translations['all_sessions'] ?? 'All Sessions'); ?></option>
                         </select>
                     </div>
+<?php if (!empty($routes)): ?>
+                    <div>
+                        <label for="route-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_route'] ?? 'Tasting route'); ?>:</label>
+                        <select id="route-filter" class="w-full">
+                            <option value=""><?php echo htmlspecialchars($translations['all_routes'] ?? 'All routes'); ?></option>
+                        </select>
+                    </div>
+<?php endif; ?>
                     <div>
                         <label for="style-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_style'] ?? 'Filter by Style'); ?>:</label>
                         <select id="style-filter" class="w-full">
@@ -638,6 +666,9 @@ if (is_readable($beersFile)) {
                             <option value="rating-asc"><?php echo htmlspecialchars($translations['sort_global_rating_asc'] ?? 'Global Rating (Low-High)'); ?></option>
                             <option value="my-rating-desc"><?php echo htmlspecialchars($translations['sort_my_rating_desc'] ?? 'My Rating (High-Low)'); ?></option>
                             <option value="my-rating-asc"><?php echo htmlspecialchars($translations['sort_my_rating_asc'] ?? 'My Rating (Low-High)'); ?></option>
+<?php if (!empty($routes)): ?>
+                            <option value="route-order"><?php echo htmlspecialchars($translations['sort_route_order'] ?? 'Route order'); ?></option>
+<?php endif; ?>
                         </select>
                     </div>
                 </div>
@@ -794,6 +825,7 @@ if (is_readable($beersFile)) {
             const sessionId = "<?php echo htmlspecialchars($sessionId); ?>";
             const enableStatisticsLogging = <?php echo json_encode($enableStatisticsLogging); ?>;
             const enableMainstyleFiltering = <?php echo json_encode(true); ?>;
+            const routes = <?php echo json_encode($routes); ?>;
             const beerDataUrl = '/data/beers.json';
 
             // --- DOM Elements ---
@@ -806,6 +838,7 @@ if (is_readable($beersFile)) {
             const breweryFilter = document.getElementById('brewery-filter');
             const countryFilter = document.getElementById('country-filter');
             const sessionFilter = document.getElementById('session-filter');
+            const routeFilter = document.getElementById('route-filter');
             const sortBy = document.getElementById('sort-by');
             const myRatedFilter = document.getElementById('my-rated-filter');
             const unratedFilter = document.getElementById('unrated-filter');
@@ -843,6 +876,7 @@ if (is_readable($beersFile)) {
                     brewery: breweryFilter.value,
                     country: countryFilter.value,
                     session: sessionFilter.value,
+                    route: routeFilter ? routeFilter.value : '',
                     myRated: myRatedFilter.checked,
                     unrated: unratedFilter.checked,
                     myFavorites: myFavoritesFilter.checked,
@@ -875,6 +909,10 @@ if (is_readable($beersFile)) {
                         breweryFilter.value = savedSettings.brewery || '';
                         countryFilter.value = savedSettings.country || '';
                         sessionFilter.value = savedSettings.session || '';
+                        if (routeFilter) {
+                            populateRouteOptions();
+                            routeFilter.value = savedSettings.route || '';
+                        }
                         myRatedFilter.checked = savedSettings.myRated || false;
                         unratedFilter.checked = savedSettings.unrated || false;
                         myFavoritesFilter.checked = savedSettings.myFavorites || false;
@@ -909,6 +947,7 @@ if (is_readable($beersFile)) {
                         brewery: breweryFilter.value,
                         country: countryFilter.value,
                         session: sessionFilter.value,
+                        route: routeFilter ? routeFilter.value : '',
                         myRated: myRatedFilter.checked,
                         unrated: unratedFilter.checked,
                         myFavorites: myFavoritesFilter.checked,
@@ -1016,12 +1055,13 @@ if (is_readable($beersFile)) {
             
             function updateClearButtonState() {
                 const isSessionActive = sessionFilter.value !== '';
-                const areOtherFiltersActive = styleFilter.value !== '' || 
-                                              breweryFilter.value !== '' || 
-                                              countryFilter.value !== '' || 
-                                              searchInput.value !== '' || 
-                                              myRatedFilter.checked || 
-                                              unratedFilter.checked || 
+                const areOtherFiltersActive = styleFilter.value !== '' ||
+                                              breweryFilter.value !== '' ||
+                                              countryFilter.value !== '' ||
+                                              searchInput.value !== '' ||
+                                              (routeFilter && routeFilter.value !== '') ||
+                                              myRatedFilter.checked ||
+                                              unratedFilter.checked ||
                                               myFavoritesFilter.checked;
 
                 if (!isSessionActive && !areOtherFiltersActive) {
@@ -1042,6 +1082,16 @@ if (is_readable($beersFile)) {
                 populateSelect(breweryFilter, [...new Set(allBeers.map(beer => beer.brewery))].sort());
                 populateSelect(countryFilter, [...new Set(allBeers.map(beer => beer.country))].sort());
                 populateSelect(sessionFilter, [...new Set(allBeers.map(beer => beer.session))].sort());
+                if (routeFilter) populateRouteOptions();
+            }
+
+            // Populate the tasting-route dropdown, limited to the active session (if any).
+            // Session values are compared case-insensitively (beers.json uses "Fredag",
+            // routes.json may use "fredag"). Removing the selected option resets value to ''.
+            function populateRouteOptions() {
+                const session = sessionFilter.value.toLowerCase();
+                const visible = routes.filter(r => !session || (r.session || '').toLowerCase() === session);
+                populateSelect(routeFilter, visible.map(r => r.name));
             }
 
             function populateSelect(selectElement, options) {
@@ -1077,6 +1127,8 @@ if (is_readable($beersFile)) {
 
             function renderBeers() {
                 let filteredBeers = [...allBeers];
+                const currentRoute = (routeFilter && routeFilter.value) ? routes.find(r => r.name === routeFilter.value) : null;
+                const routePos = currentRoute ? new Map(currentRoute.beers.map((id, i) => [id, i])) : null;
                 const searchTerm = searchInput.value.trim().replace(/\s+/g, ' ').toLowerCase();
                 
                 if (searchTerm) {
@@ -1089,6 +1141,7 @@ if (is_readable($beersFile)) {
                 if (breweryFilter.value) filteredBeers = filteredBeers.filter(beer => beer.brewery === breweryFilter.value);
                 if (countryFilter.value) filteredBeers = filteredBeers.filter(beer => beer.country === countryFilter.value);
                 if (sessionFilter.value) filteredBeers = filteredBeers.filter(beer => beer.session === sessionFilter.value);
+                if (currentRoute) filteredBeers = filteredBeers.filter(beer => routePos.has(beer.id));
 
                 if (myRatedFilter.checked) filteredBeers = filteredBeers.filter(beer => userRatings[beer.id] !== undefined);
                 if (unratedFilter.checked) filteredBeers = filteredBeers.filter(beer => userRatings[beer.id] === undefined);
@@ -1107,6 +1160,7 @@ if (is_readable($beersFile)) {
                         case 'rating-asc': return (a.rating || 0) - (b.rating || 0);
                         case 'my-rating-desc': return myRatingB - myRatingA;
                         case 'my-rating-asc': return myRatingA - myRatingB;
+                        case 'route-order': return routePos ? (routePos.get(a.id) - routePos.get(b.id)) : 0;
                         default: return 0;
                     }
                 });
@@ -1301,15 +1355,52 @@ if (is_readable($beersFile)) {
             }
 
             function initializeAppListeners() {
-                const allFilters = [styleFilter, breweryFilter, countryFilter, sessionFilter, sortBy, myRatedFilter, unratedFilter, myFavoritesFilter];
-                
-                allFilters.forEach(el => el.addEventListener('input', () => { 
+                // sessionFilter (and routeFilter) get dedicated handlers below because
+                // changing the session repopulates the route dropdown.
+                const allFilters = [styleFilter, breweryFilter, countryFilter, sortBy, myRatedFilter, unratedFilter, myFavoritesFilter];
+
+                allFilters.forEach(el => el.addEventListener('input', () => {
                     displayedCount = ITEMS_PER_PAGE; // Reset to page 1 on filter change
-                    saveState(); 
-                    renderBeers(); 
-                    updateClearButtonState(); 
+                    saveState();
+                    renderBeers();
+                    updateClearButtonState();
                 }));
-                
+
+                sessionFilter.addEventListener('input', () => {
+                    displayedCount = ITEMS_PER_PAGE;
+                    if (routeFilter) {
+                        // Repopulating drops any route not in the new session (value resets to '').
+                        populateRouteOptions();
+                        if (!routeFilter.value && sortBy.value === 'route-order') sortBy.value = 'name-asc';
+                    }
+                    saveState();
+                    renderBeers();
+                    updateClearButtonState();
+                });
+
+                if (routeFilter) {
+                    routeFilter.addEventListener('input', () => {
+                        displayedCount = ITEMS_PER_PAGE;
+                        if (routeFilter.value) {
+                            // Selecting a route clears every other filter except the session.
+                            searchInput.value = '';
+                            styleFilter.value = '';
+                            breweryFilter.value = '';
+                            countryFilter.value = '';
+                            myRatedFilter.checked = false;
+                            unratedFilter.checked = false;
+                            myFavoritesFilter.checked = false;
+                            clearSearchBtn.classList.add('hidden');
+                            sortBy.value = 'route-order';
+                        } else if (sortBy.value === 'route-order') {
+                            sortBy.value = 'name-asc';
+                        }
+                        saveState();
+                        renderBeers();
+                        updateClearButtonState();
+                    });
+                }
+
                 searchInput.addEventListener('input', () => {
                     displayedCount = ITEMS_PER_PAGE; // Reset to page 1 on search
                     clearSearchBtn.classList.toggle('hidden', !searchInput.value);
@@ -1335,12 +1426,13 @@ if (is_readable($beersFile)) {
 
                 clearFiltersButton.addEventListener('click', () => {
                     displayedCount = ITEMS_PER_PAGE;
-                    const areOtherFiltersActive = styleFilter.value !== '' || 
-                                                  breweryFilter.value !== '' || 
-                                                  countryFilter.value !== '' || 
-                                                  searchInput.value !== '' || 
-                                                  myRatedFilter.checked || 
-                                                  unratedFilter.checked || 
+                    const areOtherFiltersActive = styleFilter.value !== '' ||
+                                                  breweryFilter.value !== '' ||
+                                                  countryFilter.value !== '' ||
+                                                  searchInput.value !== '' ||
+                                                  (routeFilter && routeFilter.value !== '') ||
+                                                  myRatedFilter.checked ||
+                                                  unratedFilter.checked ||
                                                   myFavoritesFilter.checked;
 
                     if (areOtherFiltersActive) {
@@ -1352,6 +1444,8 @@ if (is_readable($beersFile)) {
                         unratedFilter.checked = false;
                         myFavoritesFilter.checked = false;
                         clearSearchBtn.classList.add('hidden');
+                        if (routeFilter) routeFilter.value = '';
+                        if (sortBy.value === 'route-order') sortBy.value = 'name-asc';
                     } else {
                         sessionFilter.value = '';
                     }

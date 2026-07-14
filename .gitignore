@@ -2,6 +2,8 @@
 logs/
 src/data/beers-*.json
 src/data/excluded_raters.json
+src/data/routes.json
+src/data/routes-*.json
 src/dist/
 node_modules/
 custom/
