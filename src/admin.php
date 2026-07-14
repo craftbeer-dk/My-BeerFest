@@ -2054,10 +2054,18 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             return JSON.stringify(currentRoutes) !== JSON.stringify(originalRoutes);
         }
 
+        // "Name - Brewery - Session" (parts omitted when empty).
+        function beerLabelFor(b) {
+            var parts = [b.name || b.id];
+            if (b.brewery) parts.push(b.brewery);
+            if (b.session) parts.push(b.session);
+            return parts.join(' - ');
+        }
+
         function beerLabel(id) {
             var b = currentBeers.find(function(x) { return x.id === id; });
             if (!b) return id + ' (unknown)';
-            return (b.name || id) + (b.brewery ? ' — ' + b.brewery : '');
+            return beerLabelFor(b);
         }
 
         function uniqueSessions() {
@@ -2147,7 +2155,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 return true;
             }).map(function(b) {
                 // Precompute the label once (avoids beerLabel's O(N) find per comparison).
-                return { id: b.id, label: (b.name || b.id) + (b.brewery ? ' — ' + b.brewery : '') };
+                return { id: b.id, label: beerLabelFor(b) };
             });
             candidates.sort(function(a, b) { return a.label.localeCompare(b.label); });
             var opts = '<option value="">Select a beer to add…</option>';
