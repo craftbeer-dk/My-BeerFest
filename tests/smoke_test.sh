@@ -362,13 +362,13 @@ assert_status "Routes save rejects cross-origin POST (evil Origin)" \
     -X POST -H "Origin: https://evil.com" -H "Content-Type: application/json" \
     -H "X-Requested-With: XMLHttpRequest" -d '[]'
 
-# routes_save with valid headers but a route referencing an unknown beer id
+# routes_save with valid headers but a malformed beer id (illegal characters)
 # should be rejected (400) — this validates without mutating routes.json.
-assert_status "Routes save rejects unknown beer id" \
+assert_status "Routes save rejects malformed beer id" \
     "$BASE_URL/admin_api.php?action=routes_save" 400 \
     -u "$ADMIN_USER:$ADMIN_PASS" \
     -X POST -H "Content-Type: application/json" -H "X-Requested-With: XMLHttpRequest" \
-    -d '[{"name":"Smoke test route","beers":["definitely-not-a-real-beer-id"]}]'
+    -d '[{"name":"Smoke test route","beers":["not a valid id!"]}]'
 
 # ══════════════════════════════════════════════════════════════════════
 # 10. STATIC PAGES

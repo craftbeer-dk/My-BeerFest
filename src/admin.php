@@ -2110,6 +2110,12 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 
             var sessionSel = document.getElementById('route-field-session');
             var sessions = uniqueSessions();
+            // Keep the route's stored session selectable even if no current beer uses it,
+            // so editing an unrelated field doesn't silently blank the session.
+            if (route.session && sessions.indexOf(route.session) < 0) {
+                sessions.push(route.session);
+                sessions.sort();
+            }
             var opts = '<option value="">(any)</option>';
             for (var s = 0; s < sessions.length; s++) {
                 opts += '<option value="' + esc(sessions[s]) + '">' + esc(sessions[s]) + '</option>';
@@ -2139,11 +2145,14 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 if (routeDraftBeers.indexOf(b.id) >= 0) return false;
                 if (session && (b.session || '').toLowerCase() !== session.toLowerCase()) return false;
                 return true;
+            }).map(function(b) {
+                // Precompute the label once (avoids beerLabel's O(N) find per comparison).
+                return { id: b.id, label: (b.name || b.id) + (b.brewery ? ' — ' + b.brewery : '') };
             });
-            candidates.sort(function(a, b) { return beerLabel(a.id).localeCompare(beerLabel(b.id)); });
+            candidates.sort(function(a, b) { return a.label.localeCompare(b.label); });
             var opts = '<option value="">Select a beer to add…</option>';
             for (var i = 0; i < candidates.length; i++) {
-                opts += '<option value="' + esc(candidates[i].id) + '">' + esc(beerLabel(candidates[i].id)) + '</option>';
+                opts += '<option value="' + esc(candidates[i].id) + '">' + esc(candidates[i].label) + '</option>';
             }
             picker.innerHTML = opts;
             picker.value = '';

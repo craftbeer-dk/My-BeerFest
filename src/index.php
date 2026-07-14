@@ -917,6 +917,12 @@ if (is_readable($routesFile)) {
                         unratedFilter.checked = savedSettings.unrated || false;
                         myFavoritesFilter.checked = savedSettings.myFavorites || false;
                         sortBy.value = savedSettings.sortBy || 'name-asc';
+                        // Fall back to a sane sort if the saved option is gone (e.g. routes
+                        // removed) or "route-order" was restored without a selected route.
+                        if (sortBy.selectedIndex < 0 ||
+                            (sortBy.value === 'route-order' && !(routeFilter && routeFilter.value))) {
+                            sortBy.value = 'name-asc';
+                        }
                         toggleSection(filterSortContent, filterSortToggleIcon, savedSettings.filterSortCollapsed);
                     } else {
                         toggleSection(filterSortContent, filterSortToggleIcon, true);
@@ -1085,16 +1091,19 @@ if (is_readable($routesFile)) {
                 if (routeFilter) populateRouteOptions();
             }
 
-            // Populate the tasting-route dropdown, limited to the active session (if any).
-            // Session values are compared case-insensitively (beers.json uses "Fredag",
-            // routes.json may use "fredag"). Removing the selected option resets value to ''.
+            // Populate the tasting-route dropdown for the active session. A route with no
+            // session applies to every session; a route with a session shows only when that
+            // session (case-insensitive: beers.json "Fredag" vs routes.json "fredag") is
+            // active or no session is filtered.
             function populateRouteOptions() {
                 const session = sessionFilter.value.toLowerCase();
-                const visible = routes.filter(r => !session || (r.session || '').toLowerCase() === session);
+                const visible = routes.filter(r => !session || !r.session || r.session.toLowerCase() === session);
                 populateSelect(routeFilter, visible.map(r => r.name));
             }
 
             function populateSelect(selectElement, options) {
+                // Preserve the current selection across repopulation when it's still offered.
+                const prev = selectElement.value;
                 // Keep the first option ("All …") and remove the rest
                 while (selectElement.options.length > 1) {
                     selectElement.removeChild(selectElement.lastChild);
@@ -1105,6 +1114,7 @@ if (is_readable($routesFile)) {
                     opt.textContent = option;
                     selectElement.appendChild(opt);
                 });
+                if (options.indexOf(prev) >= 0) selectElement.value = prev;
             }
 
             function sendRatingToServer(beerId, beerName, rating, currentSessionId) {
@@ -1369,7 +1379,8 @@ if (is_readable($routesFile)) {
                 sessionFilter.addEventListener('input', () => {
                     displayedCount = ITEMS_PER_PAGE;
                     if (routeFilter) {
-                        // Repopulating drops any route not in the new session (value resets to '').
+                        // Repopulate for the new session; a still-valid selection is preserved,
+                        // otherwise it resets to '' and we drop the now-meaningless route sort.
                         populateRouteOptions();
                         if (!routeFilter.value && sortBy.value === 'route-order') sortBy.value = 'name-asc';
                     }
@@ -1448,6 +1459,8 @@ if (is_readable($routesFile)) {
                         if (sortBy.value === 'route-order') sortBy.value = 'name-asc';
                     } else {
                         sessionFilter.value = '';
+                        // Session no longer constrains the route list — show all routes again.
+                        if (routeFilter) populateRouteOptions();
                     }
 
                     saveState();
