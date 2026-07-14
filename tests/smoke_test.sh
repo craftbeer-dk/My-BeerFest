@@ -332,7 +332,46 @@ assert_status "Stats JSON with exclude_raters param returns 200" \
     -u "$STATS_USER:$STATS_PASS"
 
 # ══════════════════════════════════════════════════════════════════════
-# 9. STATIC PAGES
+# 9. TASTING ROUTES API
+# ══════════════════════════════════════════════════════════════════════
+printf "\n\033[1m▸ Tasting routes API\033[0m\n"
+
+# routes_get without auth should be blocked by nginx basic auth
+assert_status "Routes API without auth returns 401" \
+    "$BASE_URL/admin_api.php?action=routes_get" 401
+
+# routes_get with auth returns the routes list
+ROUTES_BODY=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$BASE_URL/admin_api.php?action=routes_get")
+ROUTES_STATUS=$(echo "$ROUTES_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','') if isinstance(d.get('routes'),list) else '')" 2>/dev/null || echo "")
+if [ "$ROUTES_STATUS" = "success" ]; then
+    pass "Routes API returns success with routes array"
+else
+    fail "Routes API — got status: $ROUTES_STATUS"
+fi
+
+# routes_save without X-Requested-With should return 403 (CSRF guard)
+assert_status "Routes save without CSRF header returns 403" \
+    "$BASE_URL/admin_api.php?action=routes_save" 403 \
+    -u "$ADMIN_USER:$ADMIN_PASS" \
+    -X POST -H "Content-Type: application/json" -d '[]'
+
+# routes_save cross-origin POST with evil Origin should return 403
+assert_status "Routes save rejects cross-origin POST (evil Origin)" \
+    "$BASE_URL/admin_api.php?action=routes_save" 403 \
+    -u "$ADMIN_USER:$ADMIN_PASS" \
+    -X POST -H "Origin: https://evil.com" -H "Content-Type: application/json" \
+    -H "X-Requested-With: XMLHttpRequest" -d '[]'
+
+# routes_save with valid headers but a malformed beer id (illegal characters)
+# should be rejected (400) — this validates without mutating routes.json.
+assert_status "Routes save rejects malformed beer id" \
+    "$BASE_URL/admin_api.php?action=routes_save" 400 \
+    -u "$ADMIN_USER:$ADMIN_PASS" \
+    -X POST -H "Content-Type: application/json" -H "X-Requested-With: XMLHttpRequest" \
+    -d '[{"name":"Smoke test route","beers":["not a valid id!"]}]'
+
+# ══════════════════════════════════════════════════════════════════════
+# 10. STATIC PAGES
 # ══════════════════════════════════════════════════════════════════════
 printf "\n\033[1m▸ Other pages\033[0m\n"
 

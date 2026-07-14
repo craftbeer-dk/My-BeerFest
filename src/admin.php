@@ -779,6 +779,63 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 </div>
             </div>
         </div>
+
+        <!-- Tasting Routes -->
+        <div class="section-header" id="routes-header" onclick="window._admin.toggleRoutes()">
+            <h2 class="text-xl font-bold flex-grow" style="margin:0">Tasting Routes</h2>
+            <span class="toggle-icon rotated" id="routes-toggle">&#9660;</span>
+        </div>
+        <div class="section-content collapsed" id="routes-content">
+            <div class="highlight-section">
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="window._admin.showRouteModal(null)">+ Add Route</button>
+                    <button class="btn btn-success" id="btn-save-routes" disabled onclick="window._admin.saveAllRoutes()">Save Routes</button>
+                    <span id="routes-badge" class="changes-badge">unsaved changes</span>
+                </div>
+                <div class="table-wrapper">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th style="min-width:110px">Actions</th>
+                                <th>Name</th>
+                                <th>Session</th>
+                                <th>Beers</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routes-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Route Modal -->
+    <div id="route-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:640px;">
+            <div class="modal-header">
+                <span class="modal-title" id="route-modal-title">Add Route</span>
+                <button class="btn-small btn-ghost" onclick="window._admin.closeRouteModal()">&times;</button>
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Name *</label>
+                    <input type="text" class="form-input" id="route-field-name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Session</label>
+                    <select class="form-input" id="route-field-session" onchange="window._admin.refreshRouteBeerPicker()"></select>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:0.75rem;">
+                <label class="form-label">Add beer</label>
+                <select class="form-input" id="route-beer-picker" onchange="window._admin.addRouteBeer(this.value)"></select>
+            </div>
+            <div id="route-beer-list" style="margin-top:0.75rem;"></div>
+            <div style="margin-top:1rem; display:flex; gap:0.5rem; justify-content:flex-end;">
+                <button class="btn btn-ghost" onclick="window._admin.closeRouteModal()">Cancel</button>
+                <button class="btn btn-success" onclick="window._admin.saveRoute()">Save Route</button>
+            </div>
+        </div>
     </div>
 
     <!-- Add/Edit Beer Modal -->
@@ -851,10 +908,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         // --- Init ---
         renderTable();
         loadVersions();
+        loadRoutes();
 
         // Warn on unsaved changes
         window.addEventListener('beforeunload', function(e) {
-            if (Object.keys(modifiedIds).length > 0) {
+            if (Object.keys(modifiedIds).length > 0 || routesDirty()) {
                 e.preventDefault();
                 e.returnValue = '';
             }
@@ -1973,6 +2031,247 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             });
         }
 
+        // --- Tasting Routes ---
+        var originalRoutes = [];
+        var currentRoutes = [];
+        var editingRouteIndex = null;   // null when adding a new route
+        var routeDraftBeers = [];       // ordered beer ids being edited in the modal
+
+        function loadRoutes() {
+            fetch('admin_api.php?action=routes_get')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === 'success' && Array.isArray(data.routes)) {
+                    originalRoutes = data.routes;
+                    currentRoutes = JSON.parse(JSON.stringify(originalRoutes));
+                    renderRoutesTable();
+                }
+            })
+            .catch(function() { /* routes are optional */ });
+        }
+
+        function routesDirty() {
+            return JSON.stringify(currentRoutes) !== JSON.stringify(originalRoutes);
+        }
+
+        // "Name - Brewery - Session" (parts omitted when empty).
+        function beerLabelFor(b) {
+            var parts = [b.name || b.id];
+            if (b.brewery) parts.push(b.brewery);
+            if (b.session) parts.push(b.session);
+            return parts.join(' - ');
+        }
+
+        function beerLabel(id) {
+            var b = currentBeers.find(function(x) { return x.id === id; });
+            if (!b) return id + ' (unknown)';
+            return beerLabelFor(b);
+        }
+
+        function uniqueSessions() {
+            var set = {};
+            currentBeers.forEach(function(b) { if (b.session) set[b.session] = true; });
+            return Object.keys(set).sort();
+        }
+
+        function renderRoutesTable() {
+            var tbody = document.getElementById('routes-table-body');
+            var html = '';
+            if (currentRoutes.length === 0) {
+                html = '<tr><td colspan="4" style="text-align:center; padding:2rem; color:var(--card-paragraph-color);">No routes yet</td></tr>';
+            }
+            for (var i = 0; i < currentRoutes.length; i++) {
+                var r = currentRoutes[i];
+                var count = (r.beers || []).length;
+                html += '<tr>' +
+                    '<td><div class="actions-cell">' +
+                        '<button class="btn-small btn-primary" onclick="window._admin.showRouteModal(' + i + ')">Edit</button>' +
+                        '<button class="btn-small btn-secondary" onclick="window._admin.deleteRoute(' + i + ')">Del</button>' +
+                    '</div></td>' +
+                    '<td>' + esc(r.name || '') + '</td>' +
+                    '<td>' + esc(r.session || '') + '</td>' +
+                    '<td>' + count + ' beer' + (count === 1 ? '' : 's') + '</td>' +
+                '</tr>';
+            }
+            tbody.innerHTML = html;
+            updateRoutesToolbar();
+        }
+
+        function updateRoutesToolbar() {
+            var badge = document.getElementById('routes-badge');
+            var btn = document.getElementById('btn-save-routes');
+            if (routesDirty()) {
+                badge.classList.add('visible');
+                btn.disabled = false;
+            } else {
+                badge.classList.remove('visible');
+                btn.disabled = true;
+            }
+        }
+
+        function showRouteModal(index) {
+            editingRouteIndex = index;
+            var route = (index != null) ? currentRoutes[index] : { name: '', session: '', beers: [] };
+            routeDraftBeers = (route.beers || []).slice();
+
+            document.getElementById('route-field-name').value = route.name || '';
+
+            var sessionSel = document.getElementById('route-field-session');
+            var sessions = uniqueSessions();
+            // Keep the route's stored session selectable even if no current beer uses it,
+            // so editing an unrelated field doesn't silently blank the session.
+            if (route.session && sessions.indexOf(route.session) < 0) {
+                sessions.push(route.session);
+                sessions.sort();
+            }
+            var opts = '<option value="">(any)</option>';
+            for (var s = 0; s < sessions.length; s++) {
+                opts += '<option value="' + esc(sessions[s]) + '">' + esc(sessions[s]) + '</option>';
+            }
+            sessionSel.innerHTML = opts;
+            sessionSel.value = route.session || '';
+
+            document.getElementById('route-modal-title').textContent = (index != null) ? 'Edit Route' : 'Add Route';
+            refreshRouteBeerPicker();
+            renderRouteBeerList();
+            document.getElementById('route-modal').classList.remove('hidden');
+            document.getElementById('route-field-name').focus();
+        }
+
+        function closeRouteModal() {
+            document.getElementById('route-modal').classList.add('hidden');
+            editingRouteIndex = null;
+            routeDraftBeers = [];
+        }
+
+        // Populate the "add beer" picker with beers for the chosen session,
+        // excluding ones already in the draft.
+        function refreshRouteBeerPicker() {
+            var session = document.getElementById('route-field-session').value;
+            var picker = document.getElementById('route-beer-picker');
+            var candidates = currentBeers.filter(function(b) {
+                if (routeDraftBeers.indexOf(b.id) >= 0) return false;
+                if (session && (b.session || '').toLowerCase() !== session.toLowerCase()) return false;
+                return true;
+            }).map(function(b) {
+                // Precompute the label once (avoids beerLabel's O(N) find per comparison).
+                return { id: b.id, label: beerLabelFor(b) };
+            });
+            candidates.sort(function(a, b) { return a.label.localeCompare(b.label); });
+            var opts = '<option value="">Select a beer to add…</option>';
+            for (var i = 0; i < candidates.length; i++) {
+                opts += '<option value="' + esc(candidates[i].id) + '">' + esc(candidates[i].label) + '</option>';
+            }
+            picker.innerHTML = opts;
+            picker.value = '';
+        }
+
+        function addRouteBeer(id) {
+            if (!id) return;
+            if (routeDraftBeers.indexOf(id) < 0) routeDraftBeers.push(id);
+            refreshRouteBeerPicker();
+            renderRouteBeerList();
+        }
+
+        function renderRouteBeerList() {
+            var container = document.getElementById('route-beer-list');
+            if (routeDraftBeers.length === 0) {
+                container.innerHTML = '<p style="color:var(--card-paragraph-color); font-size:0.875rem;">No beers in this route yet. Add beers above — the order below is the tasting order.</p>';
+                return;
+            }
+            var html = '<ol style="list-style:decimal; padding-left:1.5rem; margin:0;">';
+            for (var i = 0; i < routeDraftBeers.length; i++) {
+                var id = routeDraftBeers[i];
+                html += '<li style="display:flex; align-items:center; gap:0.5rem; padding:0.25rem 0;">' +
+                    '<span style="flex:1;">' + esc(beerLabel(id)) + '</span>' +
+                    '<button class="btn-small btn-ghost" ' + (i === 0 ? 'disabled' : '') + ' onclick="window._admin.moveRouteBeer(' + i + ',-1)">&uarr;</button>' +
+                    '<button class="btn-small btn-ghost" ' + (i === routeDraftBeers.length - 1 ? 'disabled' : '') + ' onclick="window._admin.moveRouteBeer(' + i + ',1)">&darr;</button>' +
+                    '<button class="btn-small btn-secondary" onclick="window._admin.removeRouteBeer(' + i + ')">&times;</button>' +
+                '</li>';
+            }
+            html += '</ol>';
+            container.innerHTML = html;
+        }
+
+        function moveRouteBeer(index, delta) {
+            var target = index + delta;
+            if (target < 0 || target >= routeDraftBeers.length) return;
+            var tmp = routeDraftBeers[index];
+            routeDraftBeers[index] = routeDraftBeers[target];
+            routeDraftBeers[target] = tmp;
+            renderRouteBeerList();
+        }
+
+        function removeRouteBeer(index) {
+            routeDraftBeers.splice(index, 1);
+            refreshRouteBeerPicker();
+            renderRouteBeerList();
+        }
+
+        function saveRoute() {
+            var name = document.getElementById('route-field-name').value.trim();
+            if (!name) { showToast('Route name is required', 'error'); return; }
+            var session = document.getElementById('route-field-session').value;
+
+            // Duplicate-name guard (case-insensitive), ignoring the route being edited.
+            var lower = name.toLowerCase();
+            for (var i = 0; i < currentRoutes.length; i++) {
+                if (i === editingRouteIndex) continue;
+                if ((currentRoutes[i].name || '').toLowerCase() === lower) {
+                    showToast('A route named "' + name + '" already exists', 'error');
+                    return;
+                }
+            }
+            if (routeDraftBeers.length === 0) { showToast('Add at least one beer to the route', 'error'); return; }
+
+            var route = { name: name, session: session, beers: routeDraftBeers.slice() };
+            if (editingRouteIndex != null) {
+                currentRoutes[editingRouteIndex] = route;
+            } else {
+                currentRoutes.push(route);
+            }
+            closeRouteModal();
+            renderRoutesTable();
+        }
+
+        function deleteRoute(index) {
+            if (!confirm('Delete this route?')) return;
+            currentRoutes.splice(index, 1);
+            renderRoutesTable();
+        }
+
+        function saveAllRoutes() {
+            if (!routesDirty()) return;
+            var btn = document.getElementById('btn-save-routes');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            fetch('admin_api.php?action=routes_save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify(currentRoutes)
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === 'success') {
+                    originalRoutes = JSON.parse(JSON.stringify(currentRoutes));
+                    showToast('Routes saved! Backup: ' + (data.backup || 'none'));
+                    renderRoutesTable();
+                } else {
+                    showToast('Error: ' + (data.message || 'Save failed'), 'error');
+                }
+            })
+            .catch(function(err) { showToast('Network error: ' + err.message, 'error'); })
+            .finally(function() {
+                btn.textContent = 'Save Routes';
+                updateRoutesToolbar();
+            });
+        }
+
+        function toggleRoutes() {
+            document.getElementById('routes-content').classList.toggle('collapsed');
+            document.getElementById('routes-toggle').classList.toggle('rotated');
+        }
+
         // Expose functions to onclick handlers
         window._admin = {
             startEdit: startEdit,
@@ -1990,7 +2289,17 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             showPendingDiff: showPendingDiff,
             toggleRaters: toggleRaters,
             scanBadRaters: scanBadRaters,
-            toggleExcludeRater: toggleExcludeRater
+            toggleExcludeRater: toggleExcludeRater,
+            toggleRoutes: toggleRoutes,
+            showRouteModal: showRouteModal,
+            closeRouteModal: closeRouteModal,
+            refreshRouteBeerPicker: refreshRouteBeerPicker,
+            addRouteBeer: addRouteBeer,
+            moveRouteBeer: moveRouteBeer,
+            removeRouteBeer: removeRouteBeer,
+            saveRoute: saveRoute,
+            deleteRoute: deleteRoute,
+            saveAllRoutes: saveAllRoutes
         };
         window.showAddModal = showAddModal;
         window.closeAddModal = closeAddModal;

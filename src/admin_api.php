@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $dataDir = '/var/www/html/data';
 $beersFile = $dataDir . '/beers.json';
+$routesFile = $dataDir . '/routes.json';
 $excludedRatersFile = $dataDir . '/excluded_raters.json';
 $action = $_GET['action'] ?? '';
 
@@ -81,6 +82,12 @@ switch ($action) {
         break;
     case 'excluded_raters':
         handleGetExcludedRaters($excludedRatersFile);
+        break;
+    case 'routes_get':
+        handleRoutesGet($routesFile);
+        break;
+    case 'routes_save':
+        handleRoutesSave($routesFile, $dataDir);
         break;
     default:
         http_response_code(400);
@@ -196,6 +203,28 @@ function validateBeer($beer, $index) {
     return [$sanitized, null];
 }
 
+// Back up $file to $dataDir/$prefix-YYYYMMDD_HHMMSS.json (if it exists), then write $data
+// as pretty JSON under LOCK_EX. Returns [backup_basename|null, error_string|null].
+function writeJsonWithBackup($file, $dataDir, $prefix, $data) {
+    $backupBasename = null;
+    if (file_exists($file)) {
+        $backupFile = $dataDir . '/' . $prefix . '-' . date('Ymd_His') . '.json';
+        if (!copy($file, $backupFile)) {
+            return [null, 'Failed to create backup'];
+        }
+        $backupBasename = basename($backupFile);
+    }
+    $result = file_put_contents(
+        $file,
+        json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        LOCK_EX
+    );
+    if ($result === false) {
+        return [null, 'Failed to write ' . basename($file)];
+    }
+    return [$backupBasename, null];
+}
+
 function handleSave($beersFile, $dataDir) {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         http_response_code(405);
@@ -254,36 +283,151 @@ function handleSave($beersFile, $dataDir) {
         $sanitizedBeers[] = $sanitized;
     }
 
-    // Create backup of current file
-    if (file_exists($beersFile)) {
-        $timestamp = date('Ymd_His');
-        $backupFile = $dataDir . '/beers-' . $timestamp . '.json';
-
-        if (!copy($beersFile, $backupFile)) {
-            http_response_code(500);
-            echo json_encode(['status' => 'error', 'message' => 'Failed to create backup']);
-            return;
-        }
-    }
-
-    // Write the sanitized data (not the raw client input)
-    $result = file_put_contents(
-        $beersFile,
-        json_encode($sanitizedBeers, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
-
-    if ($result === false) {
+    // Back up and write the sanitized data (not the raw client input)
+    [$backupName, $writeError] = writeJsonWithBackup($beersFile, $dataDir, 'beers', $sanitizedBeers);
+    if ($writeError !== null) {
         http_response_code(500);
-        echo json_encode(['status' => 'error', 'message' => 'Failed to write beers.json']);
+        echo json_encode(['status' => 'error', 'message' => $writeError]);
         return;
     }
 
     echo json_encode([
         'status' => 'success',
         'message' => 'Data saved successfully',
-        'backup' => isset($backupFile) ? basename($backupFile) : null,
+        'backup' => $backupName,
         'beer_count' => count($sanitizedBeers)
+    ]);
+}
+
+// --- Tasting routes (routes.json) ---
+
+// Load routes.json, returning only well-formed entries (mirrors index.php's reader).
+function loadRoutes($routesFile) {
+    if (!is_readable($routesFile)) {
+        return [];
+    }
+    $decoded = json_decode(file_get_contents($routesFile), true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+// Validate and sanitize a single route. Returns [sanitized_route, error_string|null].
+// Beer ids are validated for format only, not existence — index.php tolerates ids not
+// currently in the catalog (it filters them at render), so a route may legitimately
+// reference a beer that is not yet saved or was temporarily removed.
+function validateRoute($route, $index) {
+    if (!is_array($route)) {
+        return [null, "Item at index $index is not an object"];
+    }
+
+    // name — required, non-empty after sanitizing
+    $name = $route['name'] ?? null;
+    if (!is_string($name)) {
+        return [null, "Route at index $index: 'name' is required"];
+    }
+    $name = trim(strip_tags($name));
+    if ($name === '') {
+        return [null, "Route at index $index: 'name' is required"];
+    }
+    if (mb_strlen($name) > 100) {
+        return [null, "Route at index $index: 'name' exceeds max length of 100"];
+    }
+
+    // session — optional string
+    $session = $route['session'] ?? '';
+    if (!is_string($session)) {
+        return [null, "Route at index $index: 'session' must be a string"];
+    }
+    $session = trim(strip_tags($session));
+    if (mb_strlen($session) > 100) {
+        return [null, "Route at index $index: 'session' exceeds max length of 100"];
+    }
+
+    // beers — required array of beer ids, in order, deduplicated
+    $beers = $route['beers'] ?? null;
+    if (!is_array($beers) || $beers !== array_values($beers)) {
+        return [null, "Route '$name': 'beers' must be an array"];
+    }
+    if (count($beers) > 1000) {
+        return [null, "Route '$name': too many beers (max 1000)"];
+    }
+    $sanitizedBeers = [];
+    $seen = [];
+    foreach ($beers as $id) {
+        if (!is_string($id) || !preg_match('/^[a-zA-Z0-9_-]+$/', $id)) {
+            return [null, "Route '$name': contains an invalid beer id"];
+        }
+        if (isset($seen[$id])) {
+            continue; // drop duplicates within a route
+        }
+        $seen[$id] = true;
+        $sanitizedBeers[] = $id;
+    }
+
+    return [['name' => $name, 'session' => $session, 'beers' => $sanitizedBeers], null];
+}
+
+function handleRoutesGet($routesFile) {
+    echo json_encode(['status' => 'success', 'routes' => loadRoutes($routesFile)]);
+}
+
+function handleRoutesSave($routesFile, $dataDir) {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
+        return;
+    }
+
+    $jsonData = file_get_contents('php://input');
+    if (strlen($jsonData) > 5 * 1024 * 1024) {
+        http_response_code(413);
+        echo json_encode(['status' => 'error', 'message' => 'Payload too large']);
+        return;
+    }
+
+    $newRoutes = json_decode($jsonData, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($newRoutes) || $newRoutes !== array_values($newRoutes)) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Data must be a JSON array']);
+        return;
+    }
+    if (count($newRoutes) > 200) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Too many routes (max 200)']);
+        return;
+    }
+
+    // Validate/sanitize every route and reject duplicate names.
+    $sanitizedRoutes = [];
+    $seenNames = [];
+    foreach ($newRoutes as $i => $route) {
+        [$sanitized, $error] = validateRoute($route, $i);
+        if ($error !== null) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => $error]);
+            return;
+        }
+        $nameKey = mb_strtolower($sanitized['name']);
+        if (isset($seenNames[$nameKey])) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => "Duplicate route name: " . $sanitized['name']]);
+            return;
+        }
+        $seenNames[$nameKey] = true;
+        $sanitizedRoutes[] = $sanitized;
+    }
+
+    [$backupName, $writeError] = writeJsonWithBackup($routesFile, $dataDir, 'routes', $sanitizedRoutes);
+    if ($writeError !== null) {
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => $writeError]);
+        return;
+    }
+
+    echo json_encode([
+        'status' => 'success',
+        'message' => 'Routes saved successfully',
+        'backup' => $backupName,
+        'route_count' => count($sanitizedRoutes)
     ]);
 }
 

@@ -1,16 +1,21 @@
 <?php
-// Gated proxy for /data/beers.json.
+// Gated proxy for public data files (/data/beers.json, /data/routes.json).
 //
-// When NOT_PUBLIC=true, the beer catalog is only served to visitors holding a
+// When NOT_PUBLIC=true, these files are only served to visitors holding a
 // valid bf_preview cookie (set by index.php via ?key=…). Everyone else gets
-// 403, so a casual visitor can't fetch the catalog directly while the gate is
-// up. When NOT_PUBLIC is off, this behaves like nginx's previous static
-// handler: streams the file with a Last-Modified header so browsers can
-// revalidate cheaply.
+// 403, so a casual visitor can't fetch the catalog or route lineup directly
+// while the gate is up. When NOT_PUBLIC is off, this behaves like nginx's
+// previous static handler: streams the file with a Last-Modified header so
+// browsers can revalidate cheaply.
+//
+// The target file is selected by the DATA_TARGET fastcgi_param (allowlisted
+// below), defaulting to the beer catalog.
 //
 // Gate logic mirrors src/index.php:42-80 — keep in sync.
 
-$beersFile = __DIR__ . '/data/beers.json';
+$targets = ['beers' => 'beers.json', 'routes' => 'routes.json'];
+$target = $_SERVER['DATA_TARGET'] ?? 'beers';
+$beersFile = __DIR__ . '/data/' . ($targets[$target] ?? $targets['beers']);
 
 if (!is_readable($beersFile)) {
     http_response_code(404);
