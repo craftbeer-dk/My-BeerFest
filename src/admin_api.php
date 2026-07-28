@@ -807,39 +807,106 @@ function parseDetailPage($html) {
     return $result;
 }
 
-function parseSearchResults($html) {
+// Search results are rendered client-side via Algolia; scrape the (rotating) public
+// search credentials from window.UNTAPPD_SEARCH_CONFIG. Cached per request.
+function getAlgoliaConfig() {
+    static $config = null;
+    static $attempted = false;
+
+    if ($attempted) {
+        return $config;
+    }
+    $attempted = true;
+
+    $fetch = fetchUntappdPage('https://untappd.com/search?q=beer&type=beer&sort=all');
+    if ($fetch === null) {
+        return null;
+    }
+
+    // Single-line assignment; no /s so `.*` stays on the line and grabs the whole object.
+    if (!preg_match('/window\.UNTAPPD_SEARCH_CONFIG\s*=\s*(\{.*\})\s*;/', $fetch['html'], $m)) {
+        return null;
+    }
+
+    $data = json_decode($m[1], true);
+    if (!is_array($data)) {
+        return null;
+    }
+
+    $appId = $data['appId'] ?? '';
+    $searchKey = $data['searchKey'] ?? '';
+    $index = $data['indexes']['beer']['all'] ?? 'beer';
+
+    // Validate before use in an outbound URL/headers.
+    if (!preg_match('/^[A-Z0-9]{6,32}$/', $appId)) return null;
+    if (!preg_match('/^[a-f0-9]{16,64}$/', $searchKey)) return null;
+    if (!preg_match('/^[a-z0-9_]{1,64}$/', $index)) return null;
+
+    $config = ['appId' => $appId, 'searchKey' => $searchKey, 'index' => $index];
+    return $config;
+}
+
+// Query the Algolia beer index; returns entries in the shape the scorer expects.
+function queryAlgoliaBeer($config, $query, $hitsPerPage = 10) {
+    // Host derives only from the validated appId.
+    $host = $config['appId'] . '-dsn.algolia.net';
+    $url = 'https://' . $host . '/1/indexes/' . rawurlencode($config['index']) . '/query';
+
+    $body = json_encode([
+        'params' => 'query=' . urlencode($query) . '&hitsPerPage=' . (int) $hitsPerPage,
+    ]);
+
+    throttleUntappdRequest();
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'X-Algolia-Application-Id: ' . $config['appId'],
+            'X-Algolia-API-Key: ' . $config['searchKey'],
+        ],
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+    ]);
+    $json = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || $json === false) {
+        return null;
+    }
+
+    $data = json_decode($json, true);
+    if (!is_array($data) || !isset($data['hits']) || !is_array($data['hits'])) {
+        return null;
+    }
+
     $results = [];
-
-    // Match each beer-item block. Use a lookahead to stop at the next beer-item or end markers.
-    preg_match_all('/<div class="beer-item\s*">(.*?)(?=<div class="beer-item|<div class="results-list-top|<div class="add-beer|<\/div>\s*<\/div>\s*<\/div>\s*$)/s', $html, $blocks);
-
-    foreach ($blocks[1] as $block) {
-        $entry = ['name' => '', 'brewery' => '', 'url' => '', 'rating' => null, 'style' => '', 'abv' => null];
-
-        if (preg_match('/<p class="name"><a href="([^"]+)">([^<]+)<\/a>/', $block, $m)) {
-            $entry['url'] = 'https://untappd.com' . $m[1];
-            $entry['name'] = html_entity_decode(trim($m[2]), ENT_QUOTES, 'UTF-8');
+    foreach ($data['hits'] as $hit) {
+        $name = trim((string) ($hit['beer_name'] ?? ''));
+        if ($name === '') {
+            continue;
         }
 
-        if (preg_match('/<p class="brewery"><a[^>]*>([^<]+)<\/a>/', $block, $m)) {
-            $entry['brewery'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-        }
+        $bid = (int) ($hit['bid'] ?? 0);
+        $slug = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($hit['beer_slug'] ?? '')));
+        $url = ($bid > 0 && $slug !== '') ? "https://untappd.com/b/{$slug}/{$bid}" : '';
 
-        if (preg_match('/data-rating="([^"]+)"/', $block, $m)) {
-            $entry['rating'] = round((float) $m[1], 2);
-        }
+        $rating = isset($hit['rating_score']) ? round((float) $hit['rating_score'], 2) : null;
 
-        if (preg_match('/<p class="style">([^<]+)<\/p>/', $block, $m)) {
-            $entry['style'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-        }
-
-        if (preg_match('/<p class="abv">\s*([\d.]+)%/', $block, $m)) {
-            $entry['abv'] = (float) $m[1];
-        }
-
-        if (!empty($entry['name'])) {
-            $results[] = $entry;
-        }
+        $results[] = [
+            'name'    => $name,
+            'brewery' => trim((string) ($hit['brewery_name'] ?? '')),
+            'url'     => $url,
+            'rating'  => $rating,
+            'style'   => trim((string) ($hit['type_name'] ?? '')),
+            'abv'     => isset($hit['beer_abv']) ? (float) $hit['beer_abv'] : null,
+        ];
     }
 
     return $results;
@@ -935,10 +1002,23 @@ function lookupBySearch($name, $brewery, $beerId, $currentRating) {
         $query .= ' ' . $brewery;
     }
 
+    // Human-facing link for the admin; the actual lookup uses Algolia below.
     $searchUrl = 'https://untappd.com/search?q=' . urlencode($query) . '&type=beer&sort=all';
-    $fetch = fetchUntappdPage($searchUrl);
 
-    if ($fetch === null) {
+    $config = getAlgoliaConfig();
+    if ($config === null) {
+        return [
+            'id' => $beerId,
+            'lookup_type' => 'search',
+            'found' => false,
+            'error' => 'Could not load Untappd search configuration',
+            'search_url' => $searchUrl,
+        ];
+    }
+
+    $searchResults = queryAlgoliaBeer($config, $query);
+
+    if ($searchResults === null) {
         return [
             'id' => $beerId,
             'lookup_type' => 'search',
@@ -947,8 +1027,6 @@ function lookupBySearch($name, $brewery, $beerId, $currentRating) {
             'search_url' => $searchUrl,
         ];
     }
-
-    $searchResults = parseSearchResults($fetch['html']);
 
     if (empty($searchResults)) {
         return [
