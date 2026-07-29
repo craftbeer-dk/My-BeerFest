@@ -1711,6 +1711,14 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                     } else {
                         html += '<span class="lookup-status-badge badge-nochange">No change</span>';
                     }
+                } else if (r.error === 'No rating yet on Untappd') {
+                    // Beer exists on Untappd but has too few check-ins to have a rating.
+                    html += '<div style="flex:1; min-width:200px;">';
+                    if (r.untappd_url) {
+                        html += '<a href="' + esc(r.untappd_url) + '" target="_blank" style="color:var(--link-color); font-size:0.75rem;">View on Untappd &nearr;</a>';
+                    }
+                    html += '</div>';
+                    html += '<span class="lookup-status-badge" style="background:rgba(234,179,8,0.15); color:#fde047;">No rating yet</span>';
                 } else {
                     // Not found — show search link and manual input
                     html += '<div style="flex:1; min-width:200px;">';
