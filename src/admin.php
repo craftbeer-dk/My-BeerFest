@@ -492,6 +492,15 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         .btn-untappd:hover {
             background: #e09500;
         }
+        .btn-untappd.unlinked {
+            background: transparent;
+            color: #f5a623;
+            font-weight: 600;
+            box-shadow: inset 0 0 0 1px #f5a623;
+        }
+        .btn-untappd.unlinked:hover {
+            background: rgba(245,166,35,0.15);
+        }
         .lookup-progress {
             padding: 1rem;
             text-align: center;
@@ -941,10 +950,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         }
 
         function renderDisplayRow(beer, rowClass) {
+            var linked = !!(beer.untappd && String(beer.untappd).trim());
             return '<tr class="' + rowClass + '" data-id="' + esc(beer.id) + '">' +
                 '<td><div class="actions-cell">' +
                     '<button class="btn-small btn-primary" onclick="window._admin.startEdit(\'' + esc(beer.id) + '\')">Edit</button>' +
-                    '<button class="btn-small btn-untappd" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT</button>' +
+                    '<button class="btn-small btn-untappd' + (linked ? '' : ' unlinked') + '" title="' + (linked ? 'Linked to Untappd — refresh rating' : 'Not linked — search Untappd') + '" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT' + (linked ? ' ✓' : '') + '</button>' +
                     '<button class="btn-small btn-secondary" onclick="window._admin.deleteBeer(\'' + esc(beer.id) + '\')">Del</button>' +
                 '</div></td>' +
                 '<td title="' + esc(beer.name || '') + '">' + esc(beer.name || '') + '</td>' +
