@@ -492,6 +492,15 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         .btn-untappd:hover {
             background: #e09500;
         }
+        .btn-untappd.unlinked {
+            background: transparent;
+            color: #f5a623;
+            font-weight: 600;
+            box-shadow: inset 0 0 0 1px #f5a623;
+        }
+        .btn-untappd.unlinked:hover {
+            background: rgba(245,166,35,0.15);
+        }
         .lookup-progress {
             padding: 1rem;
             text-align: center;
@@ -941,10 +950,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         }
 
         function renderDisplayRow(beer, rowClass) {
+            var linked = !!(beer.untappd && String(beer.untappd).trim());
             return '<tr class="' + rowClass + '" data-id="' + esc(beer.id) + '">' +
                 '<td><div class="actions-cell">' +
                     '<button class="btn-small btn-primary" onclick="window._admin.startEdit(\'' + esc(beer.id) + '\')">Edit</button>' +
-                    '<button class="btn-small btn-untappd" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT</button>' +
+                    '<button class="btn-small btn-untappd' + (linked ? '' : ' unlinked') + '" title="' + (linked ? 'Linked to Untappd — refresh rating' : 'Not linked — search Untappd') + '" onclick="window._admin.singleLookup(\'' + esc(beer.id) + '\')">UT ' + (linked ? '✓' : '✗') + '</button>' +
                     '<button class="btn-small btn-secondary" onclick="window._admin.deleteBeer(\'' + esc(beer.id) + '\')">Del</button>' +
                 '</div></td>' +
                 '<td title="' + esc(beer.name || '') + '">' + esc(beer.name || '') + '</td>' +
@@ -1498,7 +1508,12 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         function singleLookup(beerId) {
             var beer = currentBeers.find(function(b) { return b.id === beerId; });
             if (!beer) return;
-            runLookup([{ id: beerId }]);
+            var item = { id: beerId };
+            // Has a beer URL already: fetch its rating directly, don't search by name.
+            if (beer.untappd && /^https:\/\/untappd\.com\/b\//.test(beer.untappd)) {
+                item.manual_url = beer.untappd;
+            }
+            runLookup([item]);
         }
 
         function toggleLookupMenu(e) {
@@ -1711,6 +1726,14 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                     } else {
                         html += '<span class="lookup-status-badge badge-nochange">No change</span>';
                     }
+                } else if (r.error === 'No rating yet on Untappd') {
+                    // Beer exists on Untappd but has too few check-ins to have a rating.
+                    html += '<div style="flex:1; min-width:200px;">';
+                    if (r.untappd_url) {
+                        html += '<a href="' + esc(r.untappd_url) + '" target="_blank" style="color:var(--link-color); font-size:0.75rem;">View on Untappd &nearr;</a>';
+                    }
+                    html += '</div>';
+                    html += '<span class="lookup-status-badge" style="background:rgba(234,179,8,0.15); color:#fde047;">No rating yet</span>';
                 } else {
                     // Not found — show search link and manual input
                     html += '<div style="flex:1; min-width:200px;">';

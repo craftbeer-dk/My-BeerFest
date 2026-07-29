@@ -964,11 +964,14 @@ function lookupByDetailPage($untappdUrl, $beerId, $currentRating) {
 
     $parsed = parseDetailPage($fetch['html']);
     if ($parsed === null || $parsed['rating'] === null) {
+        // Untappd omits the aggregateRating JSON-LD until a beer has enough ratings.
+        $noRatingYet = stripos($fetch['html'], "doesn't have enough ratings") !== false
+            || stripos($fetch['html'], 'have an overall rating') !== false;
         return [
             'id' => $beerId,
             'lookup_type' => 'detail',
             'found' => false,
-            'error' => 'Could not parse rating from page',
+            'error' => $noRatingYet ? 'No rating yet on Untappd' : 'Could not parse rating from page',
             'untappd_url' => $untappdUrl,
         ];
     }
