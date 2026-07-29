@@ -1205,6 +1205,8 @@ if (is_readable($routesFile)) {
                     const alcoholText = beer.alc !== null && beer.alc !== undefined ? ` - ${beer.alc}%` : '';
                     const ratingPlaceholder = translations['rate_beer'] ?? 'Rate this beer';
                     const flagEmoji = countryFlags[beer.country.toLowerCase()] || '';
+                    const untappdUrl = safeUrl(beer.untappd);
+                    const hasUntappd = untappdUrl !== '#';
 
                     beerCard.innerHTML = `
                         <svg class="favorite-star ${isFavorited ? 'favorited' : ''}" data-beer-id="${escAttr(beer.id)}" title="Favorite" viewBox="0 0 24 24">
@@ -1216,7 +1218,7 @@ if (is_readable($routesFile)) {
                         <p><strong>${translations['session'] ?? 'Session'}:</strong> <span class="session-text"></span></p>
                         ${beer.note ? '<p class="beer-note"><span class="note-text"></span></p>' : ''}
                         <div class="beer-actions-container">
-                            <a href="${escAttr(safeUrl(beer.untappd))}" target="_blank" class="untappd-button">
+                            <a href="${hasUntappd ? escAttr(untappdUrl) : '#'}" ${hasUntappd ? 'target="_blank"' : 'data-nolink="1"'} class="untappd-button">
                                 <div class="untappd-logo"></div>
                                 <span class="global-rating-text"></span>
                             </a>
@@ -1241,6 +1243,13 @@ if (is_readable($routesFile)) {
 
                 document.querySelectorAll('.rating-select').forEach(select => {
                     select.addEventListener('change', handleRatingChange);
+                });
+
+                document.querySelectorAll('.untappd-button[data-nolink]').forEach(button => {
+                    button.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        showMessage(translations['not_on_untappd'] ?? 'Not found on Untappd', 'error');
+                    });
                 });
             }
 
