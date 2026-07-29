@@ -1498,7 +1498,12 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         function singleLookup(beerId) {
             var beer = currentBeers.find(function(b) { return b.id === beerId; });
             if (!beer) return;
-            runLookup([{ id: beerId }]);
+            var item = { id: beerId };
+            // Has a beer URL already: fetch its rating directly, don't search by name.
+            if (beer.untappd && /^https:\/\/untappd\.com\/b\//.test(beer.untappd)) {
+                item.manual_url = beer.untappd;
+            }
+            runLookup([item]);
         }
 
         function toggleLookupMenu(e) {
