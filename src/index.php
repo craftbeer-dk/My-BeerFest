@@ -371,6 +371,15 @@ if (is_readable($routesFile)) {
         .untappd-button:hover {
             background-color: var(--palette-interactive);
         }
+        .untappd-missing {
+            cursor: default;
+            opacity: 0.7;
+            font-style: italic;
+            text-align: center;
+        }
+        .untappd-missing:hover {
+            background-color: var(--palette-primary);
+        }
         .untappd-logo {
             width: 16px;
             height: 16px;
@@ -1205,6 +1214,9 @@ if (is_readable($routesFile)) {
                     const alcoholText = beer.alc !== null && beer.alc !== undefined ? ` - ${beer.alc}%` : '';
                     const ratingPlaceholder = translations['rate_beer'] ?? 'Rate this beer';
                     const flagEmoji = countryFlags[beer.country.toLowerCase()] || '';
+                    const untappdUrl = safeUrl(beer.untappd);
+                    const hasUntappd = untappdUrl !== '#';
+                    const notOnUntappd = translations['not_on_untappd'] ?? 'Not found on Untappd';
 
                     beerCard.innerHTML = `
                         <svg class="favorite-star ${isFavorited ? 'favorited' : ''}" data-beer-id="${escAttr(beer.id)}" title="Favorite" viewBox="0 0 24 24">
@@ -1216,10 +1228,12 @@ if (is_readable($routesFile)) {
                         <p><strong>${translations['session'] ?? 'Session'}:</strong> <span class="session-text"></span></p>
                         ${beer.note ? '<p class="beer-note"><span class="note-text"></span></p>' : ''}
                         <div class="beer-actions-container">
-                            <a href="${escAttr(safeUrl(beer.untappd))}" target="_blank" class="untappd-button">
+                            ${hasUntappd
+                                ? `<a href="${escAttr(untappdUrl)}" target="_blank" class="untappd-button">
                                 <div class="untappd-logo"></div>
                                 <span class="global-rating-text"></span>
-                            </a>
+                            </a>`
+                                : `<span class="untappd-button untappd-missing">${escAttr(notOnUntappd)}</span>`}
                             <select class="rating-select" data-beer-id="${escAttr(beer.id)}" data-beer-name="${escAttr(beer.name)}">
                                 <option value="">${ratingPlaceholder}</option>
                                 ${generateRatingOptions(userRating)}
@@ -1233,7 +1247,8 @@ if (is_readable($routesFile)) {
                     beerCard.querySelector('.session-text').textContent = beer.session !== undefined ? beer.session : 'N/A';
                     const noteEl = beerCard.querySelector('.note-text');
                     if (noteEl) noteEl.textContent = beer.note;
-                    beerCard.querySelector('.global-rating-text').textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
+                    const globalRatingEl = beerCard.querySelector('.global-rating-text');
+                    if (globalRatingEl) globalRatingEl.textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
                     
                     fragment.appendChild(beerCard);
                 });
