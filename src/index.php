@@ -168,6 +168,32 @@ if (is_readable($routesFile)) {
         }
     }
 }
+
+// Optional custom ordering for the style dropdown (data/stylegroups.json).
+// Accepts a grouped form ([{ "group": "...", "styles": [...] }, ...]) or a flat
+// array of style names. Group labels are not rendered — the styles are flattened
+// in file order into one ordered list. Absent/invalid file keeps alphabetical.
+$styleOrder = [];
+$styleGroupsFile = __DIR__ . '/data/stylegroups.json';
+if (is_readable($styleGroupsFile)) {
+    $decodedStyleGroups = json_decode(file_get_contents($styleGroupsFile), true);
+    if (is_array($decodedStyleGroups)) {
+        foreach ($decodedStyleGroups as $entry) {
+            if (is_string($entry)) {
+                $styles = [$entry];
+            } elseif (is_array($entry) && isset($entry['styles']) && is_array($entry['styles'])) {
+                $styles = $entry['styles'];
+            } else {
+                continue;
+            }
+            foreach ($styles as $style) {
+                if (is_string($style) && trim($style) !== '') {
+                    $styleOrder[] = trim($style);
+                }
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars($appLanguage); ?>">
@@ -826,6 +852,7 @@ if (is_readable($routesFile)) {
             const enableStatisticsLogging = <?php echo json_encode($enableStatisticsLogging); ?>;
             const enableMainstyleFiltering = <?php echo json_encode(true); ?>;
             const routes = <?php echo json_encode($routes); ?>;
+            const styleOrder = <?php echo json_encode($styleOrder); ?>;
             const beerDataUrl = '/data/beers.json';
 
             // --- DOM Elements ---
@@ -1082,9 +1109,22 @@ if (is_readable($routesFile)) {
                 }
             }
 
+            // Order the style dropdown by the optional stylegroups.json config:
+            // configured styles first (in config order, case-insensitive match),
+            // then any remaining styles alphabetically. Empty config = alphabetical.
+            function sortStylesByConfig(styles) {
+                if (!styleOrder || !styleOrder.length) return styles.slice().sort();
+                const rank = new Map(styleOrder.map((s, i) => [s.toLowerCase(), i]));
+                const configured = [], rest = [];
+                styles.forEach(s => (rank.has(s.toLowerCase()) ? configured : rest).push(s));
+                configured.sort((a, b) => rank.get(a.toLowerCase()) - rank.get(b.toLowerCase()));
+                rest.sort((a, b) => a.localeCompare(b));
+                return configured.concat(rest);
+            }
+
             function initializeFilters() {
                 const stylesToFilter = enableMainstyleFiltering ? allBeers.map(beer => beer.mainstyle) : allBeers.map(beer => beer.style);
-                populateSelect(styleFilter, [...new Set(stylesToFilter)].sort());
+                populateSelect(styleFilter, sortStylesByConfig([...new Set(stylesToFilter)]));
                 populateSelect(breweryFilter, [...new Set(allBeers.map(beer => beer.brewery))].sort());
                 populateSelect(countryFilter, [...new Set(allBeers.map(beer => beer.country))].sort());
                 populateSelect(sessionFilter, [...new Set(allBeers.map(beer => beer.session))].sort());
