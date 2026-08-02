@@ -1,0 +1,8 @@
+[
+  { "group": "Hoppy",       "styles": ["IPA", "Pale Ale", "Bitter"] },
+  { "group": "Dark",        "styles": ["Stout", "Porter", "Barleywine", "Oatwine", "Wheatwine"] },
+  { "group": "Sour & Wild", "styles": ["Sour", "Wild Ale", "Gose"] },
+  { "group": "Farmhouse",   "styles": ["Saison", "Grisette"] },
+  { "group": "Lagers",      "styles": ["Pilsner", "Lager", "Kellerbier", "Bock", "Dunkel", "Rauchbier"] },
+  { "group": "Other",       "styles": ["Mead"] }
+]
