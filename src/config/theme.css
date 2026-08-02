@@ -79,4 +79,10 @@
     --title-bg-color: var(--palette-surface);
     --title-text-color: var(--palette-text-primary);
     --divider-color: var(--palette-interactive);
+
+    /* Status text (admin-panel indicators) — pastels tuned for a dark
+       background. Light themes should override these with darker tones. */
+    --status-positive-text: #6ee7b7;   /* added / accepted / high confidence / low risk */
+    --status-negative-text: #fca5a5;   /* removed / declined / low confidence / not found */
+    --status-warning-text: #fcd34d;    /* medium confidence / no rating yet */
 }
