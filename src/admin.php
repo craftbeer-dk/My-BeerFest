@@ -379,11 +379,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         }
         .diff-added-title {
             background-color: rgba(16, 185, 129, 0.2);
-            color: #6ee7b7;
+            color: var(--status-positive-text, #6ee7b7);
         }
         .diff-removed-title {
             background-color: rgba(239, 68, 68, 0.2);
-            color: #fca5a5;
+            color: var(--status-negative-text, #fca5a5);
         }
         .diff-modified-title {
             background-color: rgba(229, 237, 144, 0.2);
@@ -407,11 +407,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             font-size: 0.75rem;
         }
         .diff-old {
-            color: #fca5a5;
+            color: var(--status-negative-text, #fca5a5);
             text-decoration: line-through;
         }
         .diff-new {
-            color: #6ee7b7;
+            color: var(--status-positive-text, #6ee7b7);
         }
         .diff-summary {
             font-size: 0.875rem;
@@ -570,9 +570,9 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             color: var(--card-paragraph-color);
             font-size: 1rem;
         }
-        .confidence-high { color: #6ee7b7; }
-        .confidence-medium { color: #fcd34d; }
-        .confidence-low { color: #fca5a5; }
+        .confidence-high { color: var(--status-positive-text, #6ee7b7); }
+        .confidence-medium { color: var(--status-warning-text, #fcd34d); }
+        .confidence-low { color: var(--status-negative-text, #fca5a5); }
         .lookup-result-actions {
             display: flex;
             gap: 0.375rem;
@@ -646,11 +646,11 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         }
         .badge-accepted {
             background: rgba(16, 185, 129, 0.2);
-            color: #6ee7b7;
+            color: var(--status-positive-text, #6ee7b7);
         }
         .badge-declined {
             background: rgba(239, 68, 68, 0.2);
-            color: #fca5a5;
+            color: var(--status-negative-text, #fca5a5);
         }
         .badge-nochange {
             background: rgba(203, 213, 225, 0.15);
@@ -666,12 +666,12 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             font-weight: 600;
             margin: 0.125rem;
         }
-        .rater-pattern-high { background: rgba(239,68,68,0.2); color: #fca5a5; }
-        .rater-pattern-medium { background: rgba(252,211,77,0.2); color: #fcd34d; }
-        .rater-pattern-low { background: rgba(110,231,183,0.2); color: #6ee7b7; }
+        .rater-pattern-high { background: rgba(239,68,68,0.2); color: var(--status-negative-text, #fca5a5); }
+        .rater-pattern-medium { background: rgba(252,211,77,0.2); color: var(--status-warning-text, #fcd34d); }
+        .rater-pattern-low { background: rgba(110,231,183,0.2); color: var(--status-positive-text, #6ee7b7); }
         .rater-conf-high { color: #ef4444; font-weight: 700; }
-        .rater-conf-medium { color: #fcd34d; font-weight: 600; }
-        .rater-conf-low { color: #6ee7b7; }
+        .rater-conf-medium { color: var(--status-warning-text, #fcd34d); font-weight: 600; }
+        .rater-conf-low { color: var(--status-positive-text, #6ee7b7); }
         .rater-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
         .rater-table th {
             text-align: left; padding: 0.625rem 0.5rem; font-weight: 600;
@@ -684,7 +684,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         }
         .rater-table tr.excluded-row { opacity: 0.5; }
         .rater-excluded-badge {
-            background: rgba(239,68,68,0.2); color: #fca5a5;
+            background: rgba(239,68,68,0.2); color: var(--status-negative-text, #fca5a5);
             font-size: 0.6875rem; font-weight: 700; padding: 0.125rem 0.5rem; border-radius: 9999px;
         }
         .rater-scan-info {
@@ -1733,7 +1733,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                         html += '<a href="' + esc(r.untappd_url) + '" target="_blank" style="color:var(--link-color); font-size:0.75rem;">View on Untappd &nearr;</a>';
                     }
                     html += '</div>';
-                    html += '<span class="lookup-status-badge" style="background:rgba(234,179,8,0.15); color:#fde047;">No rating yet</span>';
+                    html += '<span class="lookup-status-badge" style="background:rgba(234,179,8,0.15); color:var(--status-warning-text, #fde047);">No rating yet</span>';
                 } else {
                     // Not found — show search link and manual input
                     html += '<div style="flex:1; min-width:200px;">';
@@ -1745,7 +1745,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                         '<button class="btn-small btn-untappd" onclick="window._admin.manualFetch(\'' + esc(r.id) + '\')">Fetch</button>' +
                         '</div>';
                     html += '</div>';
-                    html += '<span class="lookup-status-badge" style="background:rgba(239,68,68,0.15); color:#fca5a5;">Not found</span>';
+                    html += '<span class="lookup-status-badge" style="background:rgba(239,68,68,0.15); color:var(--status-negative-text, #fca5a5);">Not found</span>';
                 }
 
                 html += '</div>';
