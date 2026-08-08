@@ -264,11 +264,15 @@ if (is_readable($styleGroupsFile)) {
             position: relative; /* Needed for absolute positioning of the star */
         }
         .beer-card h2 {
-            font-size: 1.125rem;
+            font-size: 1.1rem;
             font-weight: 600;
             color: var(--card-heading-color);
-            margin-bottom: 0.5rem;
+            margin: 0 0 0.55rem;
             padding-right: 2.5rem; /* Ensure text doesn't overlap with the star */
+        }
+        .beer-card h2 .beer-abv {
+            font-weight: 600;
+            opacity: 0.8;
         }
         .beer-card p {
             font-size: 0.875rem;
@@ -276,13 +280,32 @@ if (is_readable($styleGroupsFile)) {
             line-height: 1.3;
             margin-bottom: 0.25rem;
         }
+        .beer-card .beer-brewery {
+            color: var(--card-heading-color);
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin: 0 0 0.15rem;
+        }
+        .beer-card .beer-style {
+            color: var(--card-paragraph-color);
+            font-size: 0.875rem;
+            font-weight: 400;
+            margin: 0 0 0.35rem;
+        }
+        .beer-card .beer-session {
+            color: var(--card-paragraph-color);
+            opacity: 0.72;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            margin: 0;
+        }
         .beer-note {
-            font-size: 0.8rem;
+            font-size: 0.83rem;
             font-style: italic;
             color: var(--card-paragraph-color);
-            opacity: 0.85;
-            margin-top: 0.25rem;
-            margin-bottom: 0.25rem;
+            margin: 0.6rem 0 0;
         }
         .favorite-star {
             position: absolute;
@@ -1242,7 +1265,6 @@ if (is_readable($styleGroupsFile)) {
                         displayedStyle = beer.mainstyle + (beer.substyle ? ` (${beer.substyle})` : '');
                     }
                     
-                    const alcoholText = beer.alc !== null && beer.alc !== undefined ? ` - ${beer.alc}%` : '';
                     const ratingPlaceholder = translations['rate_beer'] ?? 'Rate this beer';
                     const flagEmoji = countryFlags[beer.country.toLowerCase()] || '';
                     const untappdUrl = safeUrl(beer.untappd);
@@ -1253,9 +1275,9 @@ if (is_readable($styleGroupsFile)) {
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                         </svg>
                         <h2></h2>
-                        <p><strong>${translations['brewery'] ?? 'Brewery'}:</strong> <span class="brewery-text"></span></p>
-                        <p><strong>${translations['style'] ?? 'Style'}:</strong> <span class="style-text"></span></p>
-                        <p><strong>${translations['session'] ?? 'Session'}:</strong> <span class="session-text"></span></p>
+                        <p class="beer-brewery brewery-text"></p>
+                        <p class="beer-style style-text"></p>
+                        <p class="beer-session session-text"></p>
                         ${beer.note ? '<p class="beer-note"><span class="note-text"></span></p>' : ''}
                         <div class="beer-actions-container">
                             <a href="${hasUntappd ? escAttr(untappdUrl) : '#'}" ${hasUntappd ? 'target="_blank"' : 'data-nolink="1"'} class="untappd-button">
@@ -1269,10 +1291,19 @@ if (is_readable($styleGroupsFile)) {
                         </div>
                     `;
 
-                    beerCard.querySelector('h2').textContent = beer.name + alcoholText;
+                    const headingEl = beerCard.querySelector('h2');
+                    headingEl.textContent = beer.name;
+                    if (beer.alc !== null && beer.alc !== undefined) {
+                        const abvEl = document.createElement('span');
+                        abvEl.className = 'beer-abv';
+                        abvEl.textContent = ` – ${beer.alc}%`;
+                        headingEl.appendChild(abvEl);
+                    }
                     beerCard.querySelector('.brewery-text').textContent = `${beer.brewery} ${flagEmoji}`;
                     beerCard.querySelector('.style-text').textContent = displayedStyle;
-                    beerCard.querySelector('.session-text').textContent = beer.session !== undefined ? beer.session : 'N/A';
+                    const sessionText = beer.session !== undefined ? beer.session : 'N/A';
+                    const locationText = beer.location ? ` - ${beer.location}` : '';
+                    beerCard.querySelector('.session-text').textContent = sessionText + locationText;
                     const noteEl = beerCard.querySelector('.note-text');
                     if (noteEl) noteEl.textContent = beer.note;
                     beerCard.querySelector('.global-rating-text').textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
