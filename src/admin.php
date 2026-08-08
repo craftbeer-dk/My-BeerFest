@@ -750,6 +750,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                             <th>Rating</th>
                             <th>Country</th>
                             <th>Session</th>
+                            <th>Location</th>
                             <th>Note</th>
                         </tr>
                     </thead>
@@ -910,6 +911,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             { key: 'rating', label: 'Rating', type: 'number', step: '0.01' },
             { key: 'country', label: 'Country', type: 'text' },
             { key: 'session', label: 'Session', type: 'text' },
+            { key: 'location', label: 'Location', type: 'text' },
             { key: 'note', label: 'Note', type: 'text' },
             { key: 'untappd', label: 'Untappd URL', type: 'url' }
         ];
@@ -934,7 +936,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             var filtered = getFilteredBeers();
 
             if (filtered.length === 0) {
-                html = '<tr><td colspan="9" style="text-align:center; padding:2rem; color:var(--card-paragraph-color);">No beers found</td></tr>';
+                html = '<tr><td colspan="10" style="text-align:center; padding:2rem; color:var(--card-paragraph-color);">No beers found</td></tr>';
             }
 
             for (var i = 0; i < filtered.length; i++) {
@@ -964,6 +966,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 '<td>' + esc(beer.rating != null ? beer.rating : '') + '</td>' +
                 '<td>' + esc(beer.country || '') + '</td>' +
                 '<td>' + esc(beer.session || '') + '</td>' +
+                '<td>' + esc(beer.location || '') + '</td>' +
                 '<td title="' + esc(beer.note || '') + '">' + esc(beer.note || '') + '</td>' +
             '</tr>';
         }
