@@ -331,6 +331,11 @@ assert_status "Stats JSON with exclude_raters param returns 200" \
     "$BASE_URL/stats.php?format=json&exclude_raters=1" 200 \
     -u "$STATS_USER:$STATS_PASS"
 
+# Stats with device filter param (affects Visitors only)
+assert_status "Stats JSON with device filter param returns 200" \
+    "$BASE_URL/stats.php?format=json&device=mobile" 200 \
+    -u "$STATS_USER:$STATS_PASS"
+
 # ══════════════════════════════════════════════════════════════════════
 # 9. TASTING ROUTES API
 # ══════════════════════════════════════════════════════════════════════
