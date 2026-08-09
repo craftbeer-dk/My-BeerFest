@@ -73,6 +73,23 @@ try {
     $timestamp_unix_ms = round(microtime(true) * 1000); // Fallback for Unix ms.
 }
 
+// Capture the user agent and derive a coarse device type from it.
+$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+$userAgent = strip_tags(trim($userAgent));
+if (strlen($userAgent) > 512) {
+    $userAgent = substr($userAgent, 0, 512);
+}
+
+if ($userAgent === '') {
+    $deviceType = 'unknown';
+} elseif (preg_match('/\b(iPad|Tablet)\b|Android(?!.*Mobile)/i', $userAgent)) {
+    $deviceType = 'tablet';
+} elseif (preg_match('/Mobi|iPhone|iPod|Android.*Mobile|Windows Phone/i', $userAgent)) {
+    $deviceType = 'mobile';
+} else {
+    $deviceType = 'desktop';
+}
+
 // Prepare the log entry.
 $logEntry = [
     'timestamp'        => $timestamp,
@@ -81,6 +98,8 @@ $logEntry = [
     'festival_name'    => $festivalTitle,
     'action'           => 'cookie consent',
     'consent'          => (bool) $data['consent'], // Ensure it's a boolean.
+    'user_agent'       => $userAgent,
+    'device_type'      => $deviceType,
 ];
 
 // Convert the log entry to a JSON string.
