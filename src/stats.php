@@ -47,14 +47,15 @@ function t($key, $default = '') {
  * @param string $targetSession Optional session filter (e.g., 'Fredag').
  * @return array The calculated statistics object.
  */
-function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = []) {
+function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = [], $deviceFilter = '') {
     $stats = array(
         'visitors' => array(
             'total' => 0,
             'yes' => 0,
             'no' => 0,
             'devices' => array('mobile' => 0, 'tablet' => 0, 'desktop' => 0, 'unknown' => 0),
-            'daily' => array()
+            'daily' => array(),
+            'device_filter' => $deviceFilter
         ),
         'engagement' => array('total_ratings' => 0, 'unique_users' => 0, 'beers_with_ratings' => 0),
         'highlights' => array(
@@ -95,13 +96,19 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
         fclose($handle);
     }
 
-    $stats['visitors']['total'] = count($visitorConsents);
-    foreach ($visitorConsents as $c) {
-        if ($c) $stats['visitors']['yes']++;
-        else $stats['visitors']['no']++;
-    }
     foreach ($visitorDevices as $device) {
         $stats['visitors']['devices'][$device]++;
+    }
+
+    $matchesDevice = function($sid) use ($visitorDevices, $deviceFilter) {
+        return $deviceFilter === '' || (isset($visitorDevices[$sid]) && $visitorDevices[$sid] === $deviceFilter);
+    };
+
+    foreach ($visitorConsents as $sid => $c) {
+        if (!$matchesDevice($sid)) continue;
+        $stats['visitors']['total']++;
+        if ($c) $stats['visitors']['yes']++;
+        else $stats['visitors']['no']++;
     }
 
     try {
@@ -112,10 +119,13 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
     $cursor->modify('-13 days');
     for ($i = 0; $i < 14; $i++) {
         $day = $cursor->format('Y-m-d');
-        $stats['visitors']['daily'][] = array(
-            'date'  => $day,
-            'count' => isset($dailyVisitors[$day]) ? count($dailyVisitors[$day]) : 0
-        );
+        $count = 0;
+        if (isset($dailyVisitors[$day])) {
+            foreach ($dailyVisitors[$day] as $sid => $_) {
+                if ($matchesDevice($sid)) $count++;
+            }
+        }
+        $stats['visitors']['daily'][] = array('date' => $day, 'count' => $count);
         $cursor->modify('+1 day');
     }
 
@@ -228,6 +238,11 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
 $filterSession = isset($_GET['session']) ? $_GET['session'] : '';
 $excludeRaters = isset($_GET['exclude_raters']) && $_GET['exclude_raters'] === '1';
 
+$deviceFilter = isset($_GET['device']) ? $_GET['device'] : '';
+if (!in_array($deviceFilter, array('mobile', 'tablet', 'desktop', 'unknown'), true)) {
+    $deviceFilter = '';
+}
+
 $excludedSessionIds = [];
 if ($excludeRaters) {
     $excludedFile = '/var/www/html/data/excluded_raters.json';
@@ -241,14 +256,14 @@ if ($excludeRaters) {
 
 if (isset($_GET['format']) && $_GET['format'] === 'json') {
     header('Content-Type: application/json');
-    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds);
+    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter);
     $stats['exclude_raters_active'] = $excludeRaters;
     $stats['excluded_count'] = count($excludedSessionIds);
     echo json_encode($stats);
     exit;
 }
 
-$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds);
+$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter);
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Beerfest');
 ?>
 <!DOCTYPE html>
@@ -325,6 +340,13 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
         .btn { background: var(--button-primary-background-color); color: white; padding: 0 1.5rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; border: none; height: 36px; }
         .btn:hover { background-color: var(--button-primary-hover-bg); cursor: pointer; }
+
+        .device-row { cursor: pointer; transition: background-color 0.15s; }
+        .device-row:hover { background-color: rgba(255,255,255,0.06); }
+        .device-row.active { background-color: rgba(229,237,144,0.14); }
+        .device-row.active td:first-child { font-weight: 600; color: var(--palette-text-primary); }
+        .filter-note { font-size: 0.875rem; font-weight: 400; color: var(--card-paragraph-color); }
+        .filter-note button { color: var(--palette-link); cursor: pointer; margin-left: 0.25rem; }
     </style>
 </head>
 <body>
@@ -342,13 +364,22 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         <div class="highlight-section mb-6">
             <div class="flex flex-col md:flex-row md:items-end gap-4">
                 <div class="w-full md:w-48">
-                    <label for="session-select"><?php echo t('session', 'Session'); ?></label>
+                    <label for="session-select"><?php echo t('session', 'Session'); ?> (Raters)</label>
                     <select id="session-select" onchange="refreshData()">
                         <option value=""><?php echo t('all_sessions', 'All Sessions'); ?></option>
                         <?php foreach ($initialData['available_sessions'] as $s): ?>
                             <option value="<?php echo htmlspecialchars($s); ?>">
                                 <?php echo htmlspecialchars($s); ?>
                             </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="w-full md:w-48">
+                    <label for="device-select">Device (Visitors)</label>
+                    <select id="device-select" onchange="refreshData()">
+                        <?php foreach (array('' => 'All Devices', 'mobile' => 'Mobile', 'tablet' => 'Tablet', 'desktop' => 'Desktop', 'unknown' => 'Unknown') as $val => $lbl): ?>
+                            <option value="<?php echo $val; ?>"<?php echo $deviceFilter === $val ? ' selected' : ''; ?>><?php echo $lbl; ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -373,7 +404,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
         <!-- ============ VISITORS ============ -->
         <div class="stats-group">
-            <h2 class="section-heading">Visitors</h2>
+            <h2 class="section-heading">Visitors <span id="visitor-filter-note" class="filter-note"></span></h2>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div class="stat-card">
@@ -408,10 +439,10 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr class="border-b border-white/10"><td class="py-2">Mobile</td><td class="py-2 text-right font-bold" id="v-mobile">0</td><td class="py-2 text-right opacity-70" id="v-mobile-pct">–</td></tr>
-                                <tr class="border-b border-white/10"><td class="py-2">Tablet</td><td class="py-2 text-right font-bold" id="v-tablet">0</td><td class="py-2 text-right opacity-70" id="v-tablet-pct">–</td></tr>
-                                <tr class="border-b border-white/10"><td class="py-2">Desktop</td><td class="py-2 text-right font-bold" id="v-desktop">0</td><td class="py-2 text-right opacity-70" id="v-desktop-pct">–</td></tr>
-                                <tr><td class="py-2">Unknown</td><td class="py-2 text-right font-bold" id="v-unknown">0</td><td class="py-2 text-right opacity-70" id="v-unknown-pct">–</td></tr>
+                                <tr class="device-row border-b border-white/10" data-device="mobile" onclick="selectDevice('mobile')"><td class="py-2">Mobile</td><td class="py-2 text-right font-bold" id="v-mobile">0</td><td class="py-2 text-right opacity-70" id="v-mobile-pct">–</td></tr>
+                                <tr class="device-row border-b border-white/10" data-device="tablet" onclick="selectDevice('tablet')"><td class="py-2">Tablet</td><td class="py-2 text-right font-bold" id="v-tablet">0</td><td class="py-2 text-right opacity-70" id="v-tablet-pct">–</td></tr>
+                                <tr class="device-row border-b border-white/10" data-device="desktop" onclick="selectDevice('desktop')"><td class="py-2">Desktop</td><td class="py-2 text-right font-bold" id="v-desktop">0</td><td class="py-2 text-right opacity-70" id="v-desktop-pct">–</td></tr>
+                                <tr class="device-row" data-device="unknown" onclick="selectDevice('unknown')"><td class="py-2">Unknown</td><td class="py-2 text-right font-bold" id="v-unknown">0</td><td class="py-2 text-right opacity-70" id="v-unknown-pct">–</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -421,7 +452,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
         <!-- ============ RATERS ============ -->
         <div class="stats-group">
-            <h2 class="section-heading">Raters</h2>
+            <h2 class="section-heading">Raters <span id="raters-filter-note" class="filter-note"></span></h2>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div class="stat-card">
@@ -511,7 +542,8 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         async function refreshData() {
             const session = document.getElementById('session-select').value;
             const excludeRaters = document.getElementById('exclude-raters').checked ? '1' : '0';
-            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}`;
+            const device = document.getElementById('device-select').value;
+            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}&device=${encodeURIComponent(device)}`;
 
             try {
                 const response = await fetch(url);
@@ -524,6 +556,15 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         }
 
         /**
+         * Filters the Visitors section to a device type.
+         */
+        function selectDevice(key) {
+            const select = document.getElementById('device-select');
+            select.value = (select.value === key) ? '' : key;
+            refreshData();
+        }
+
+        /**
          * Renders the visitor trend as an inline SVG line chart.
          */
         function renderVisitorChart(series) {
@@ -531,6 +572,10 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             if (!host) return;
             const data = Array.isArray(series) ? series : [];
             if (data.length === 0) { host.innerHTML = ''; return; }
+
+            const prevLeft = host.scrollLeft;
+            const prevMax = host.scrollWidth - host.clientWidth;
+            const pinRight = prevMax <= 0 || prevLeft >= prevMax - 2;
 
             const W = 760, H = 240;
             const padL = 32, padR = 12, padT = 16, padB = 28;
@@ -549,6 +594,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                 const p = String(ds).split('-');
                 return p.length === 3 ? p[2] + '/' + p[1] : ds;
             };
+            const anchorFor = i => i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
 
             const linePts = counts.map((c, i) => px(i).toFixed(1) + ',' + py(c).toFixed(1)).join(' ');
             const baseY = (padT + plotH).toFixed(1);
@@ -557,7 +603,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" '
                 + 'preserveAspectRatio="xMidYMid meet" style="min-width:520px;width:100%;height:100%;display:block;">';
 
-            [0, maxY].forEach(v => {
+            [0].forEach(v => {
                 const y = py(v).toFixed(1);
                 svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y
                     + '" stroke="var(--divider-color)" stroke-width="1" opacity="0.4"/>';
@@ -578,17 +624,19 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
             data.forEach((d, i) => {
                 const isPeak = hasPeak && i === peakIdx;
-                svg += '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(counts[i]).toFixed(1) + '" '
+                const cx = px(i).toFixed(1);
+                const cy = py(counts[i]).toFixed(1);
+                svg += '<circle cx="' + cx + '" cy="' + cy + '" '
                     + 'r="' + (isPeak ? 4 : 2.5) + '" fill="var(--palette-text-primary)"'
                     + (isPeak ? ' stroke="var(--card-background-color)" stroke-width="1.5"' : '')
                     + '><title>' + fmtDate(d.date) + ': ' + counts[i] + '</title></circle>';
+                const ly = Math.max(py(counts[i]) - 8, 11);
+                svg += '<text x="' + cx + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchorFor(i) + '" '
+                    + 'font-size="' + (isPeak ? 11 : 10) + '" '
+                    + (isPeak ? 'font-weight="600" fill="var(--palette-text-primary)"'
+                              : 'fill="var(--card-paragraph-color)"')
+                    + '>' + counts[i] + '</text>';
             });
-
-            if (hasPeak) {
-                const ly = Math.max(py(peakVal) - 8, 11);
-                svg += '<text x="' + px(peakIdx).toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="middle" '
-                    + 'font-size="11" font-weight="600" fill="var(--palette-text-primary)">' + peakVal + '</text>';
-            }
 
             const step = Math.max(1, Math.round(n / 7));
             const forced = hasPeak ? [0, n - 1, peakIdx] : [0, n - 1];
@@ -599,13 +647,20 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             const labelIdx = Array.from(ticks).sort((a, b) => a - b);
             labelIdx.forEach(i => {
                 const isPeak = hasPeak && i === peakIdx;
-                svg += '<text x="' + px(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" '
+                svg += '<text x="' + px(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + anchorFor(i) + '" font-size="11" '
                     + (isPeak ? 'font-weight="600" ' : '')
                     + 'fill="var(--card-paragraph-color)">' + fmtDate(data[i].date) + '</text>';
             });
 
             svg += '</svg>';
             host.innerHTML = svg;
+
+            const applyScroll = () => {
+                const newMax = host.scrollWidth - host.clientWidth;
+                if (newMax > 0) host.scrollLeft = pinRight ? newMax : Math.min(prevLeft, newMax);
+            };
+            applyScroll();
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyScroll);
         }
 
         /**
@@ -619,19 +674,58 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
             // Devices
             const devices = data.visitors.devices || {};
-            const deviceTotal = Number(data.visitors.total) || 0;
+            const deviceTotal = Object.values(devices).reduce((a, b) => a + (Number(b) || 0), 0);
             ['mobile', 'tablet', 'desktop', 'unknown'].forEach(key => {
                 const count = Number(devices[key]) || 0;
                 document.getElementById('v-' + key).textContent = count;
                 document.getElementById('v-' + key + '-pct').textContent =
                     deviceTotal > 0 ? Math.round(count / deviceTotal * 100) + '%' : '–';
             });
+
+            const activeDevice = data.visitors.device_filter || '';
+            document.getElementById('device-select').value = activeDevice;
+            const labels = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop', unknown: 'Unknown' };
+            document.querySelectorAll('.device-row').forEach(row => {
+                row.classList.toggle('active', row.dataset.device === activeDevice);
+            });
+            const note = document.getElementById('visitor-filter-note');
+            note.textContent = '';
+            if (activeDevice) {
+                note.append('— ' + (labels[activeDevice] || activeDevice) + ' only ');
+                const clear = document.createElement('button');
+                clear.type = 'button';
+                clear.textContent = '(clear)';
+                clear.onclick = () => selectDevice(activeDevice);
+                note.append(clear);
+            }
+
             renderVisitorChart(data.visitors.daily || []);
 
             // Engagement
             document.getElementById('r-total').textContent = data.engagement.total_ratings;
             document.getElementById('r-users').textContent = data.engagement.unique_users;
             document.getElementById('r-beers').textContent = data.engagement.beers_with_ratings;
+
+            // Raters filter note
+            const rSession = document.getElementById('session-select').value;
+            const rExclude = document.getElementById('exclude-raters').checked;
+            const rNote = document.getElementById('raters-filter-note');
+            rNote.textContent = '';
+            const rParts = [];
+            if (rSession) rParts.push(rSession);
+            if (rExclude) rParts.push('excl. flagged');
+            if (rParts.length) {
+                rNote.append('— ' + rParts.join(', ') + ' ');
+                const rClear = document.createElement('button');
+                rClear.type = 'button';
+                rClear.textContent = '(clear)';
+                rClear.onclick = () => {
+                    document.getElementById('session-select').value = '';
+                    document.getElementById('exclude-raters').checked = false;
+                    refreshData();
+                };
+                rNote.append(rClear);
+            }
 
             // Highlights — safe DOM construction (no innerHTML with user data)
             const setHighlight = (elId, item, suffix) => {
