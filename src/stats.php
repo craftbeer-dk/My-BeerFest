@@ -49,7 +49,13 @@ function t($key, $default = '') {
  */
 function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = []) {
     $stats = array(
-        'visitors' => array('total' => 0, 'yes' => 0, 'no' => 0),
+        'visitors' => array(
+            'total' => 0,
+            'yes' => 0,
+            'no' => 0,
+            'devices' => array('mobile' => 0, 'tablet' => 0, 'desktop' => 0, 'unknown' => 0),
+            'daily' => array()
+        ),
         'engagement' => array('total_ratings' => 0, 'unique_users' => 0, 'beers_with_ratings' => 0),
         'highlights' => array(
             'highest_beer' => null, 
@@ -66,6 +72,8 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
 
     // 1. Process Visitor Logs (Deduplicate by session_id)
     $visitorConsents = array();
+    $visitorDevices = array();
+    $dailyVisitors = array();
     if (file_exists($consentPath)) {
         $handle = fopen($consentPath, "r");
         while (($line = fgets($handle)) !== false) {
@@ -73,15 +81,42 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
             if ($entry && isset($entry['session_id'])) {
                 // Keep only the newest consent state for each visitor
                 $visitorConsents[$entry['session_id']] = (isset($entry['consent']) && $entry['consent'] === true);
+                $device = isset($entry['device_type']) ? $entry['device_type'] : 'unknown';
+                if (!isset($stats['visitors']['devices'][$device])) $device = 'unknown';
+                $visitorDevices[$entry['session_id']] = $device;
+                if (isset($entry['timestamp']) && is_string($entry['timestamp'])) {
+                    $day = substr($entry['timestamp'], 0, 10);
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+                        $dailyVisitors[$day][$entry['session_id']] = true;
+                    }
+                }
             }
         }
         fclose($handle);
     }
-    
+
     $stats['visitors']['total'] = count($visitorConsents);
     foreach ($visitorConsents as $c) {
         if ($c) $stats['visitors']['yes']++;
         else $stats['visitors']['no']++;
+    }
+    foreach ($visitorDevices as $device) {
+        $stats['visitors']['devices'][$device]++;
+    }
+
+    try {
+        $cursor = new DateTime('now', new DateTimeZone('UTC'));
+    } catch (Exception $e) {
+        $cursor = new DateTime('@' . time());
+    }
+    $cursor->modify('-13 days');
+    for ($i = 0; $i < 14; $i++) {
+        $day = $cursor->format('Y-m-d');
+        $stats['visitors']['daily'][] = array(
+            'date'  => $day,
+            'count' => isset($dailyVisitors[$day]) ? count($dailyVisitors[$day]) : 0
+        );
+        $cursor->modify('+1 day');
     }
 
     // 2. Process Rating Logs (Deduplicate per user per beer)
@@ -254,6 +289,9 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         .stat-number { font-size: 2.25rem; font-weight: 700; color: var(--palette-text-primary); display: block; }
         .stat-label { font-size: 0.75rem; color: var(--card-paragraph-color); text-transform: uppercase; font-weight: 600; }
         
+        .section-heading { font-size: 1.5rem; font-weight: 600; color: var(--card-heading-color); margin: 0 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--divider-color); }
+        .stats-group { margin-bottom: 2.5rem; }
+
         .highlight-section { background-color: var(--section-background-color); border: 1px solid var(--section-border-color); border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .highlight-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 1rem; color: var(--card-heading-color); border-bottom: 1px solid var(--divider-color); padding-bottom: 0.5rem; }
         
@@ -333,36 +371,72 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
 
 
-        <!-- Metric Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="stat-card">
-                <span id="v-total" class="stat-number">0</span>
-                <span class="stat-label">Total Unique Visitors</span>
+        <!-- ============ VISITORS ============ -->
+        <div class="stats-group">
+            <h2 class="section-heading">Visitors</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="stat-card">
+                    <span id="v-total" class="stat-number">0</span>
+                    <span class="stat-label">Total Unique Visitors</span>
+                </div>
+                <div class="stat-card border-green-500/30">
+                    <span id="v-yes" class="stat-number text-green-500">0</span>
+                    <span class="stat-label">Consent Given</span>
+                </div>
+                <div class="stat-card border-red-500/30">
+                    <span id="v-no" class="stat-number text-red-500">0</span>
+                    <span class="stat-label">Consent Refused</span>
+                </div>
             </div>
-            <div class="stat-card border-green-500/30">
-                <span id="v-yes" class="stat-number text-green-500">0</span>
-                <span class="stat-label">Consent Given</span>
-            </div>
-            <div class="stat-card border-red-500/30">
-                <span id="v-no" class="stat-number text-red-500">0</span>
-                <span class="stat-label">Consent Refused</span>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="highlight-section" style="margin-bottom: 0; display: flex; flex-direction: column;">
+                    <h3 class="highlight-title">Daily Visitors (last 14 days)</h3>
+                    <div id="visitor-chart" class="overflow-x-auto" style="flex: 1; min-height: 220px;"></div>
+                </div>
+
+                <div class="highlight-section" style="margin-bottom: 0;">
+                    <h3 class="highlight-title">Devices</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-white/20">
+                                    <th class="py-2">Device</th>
+                                    <th class="py-2 text-right">Visitors</th>
+                                    <th class="py-2 text-right">Share</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b border-white/10"><td class="py-2">Mobile</td><td class="py-2 text-right font-bold" id="v-mobile">0</td><td class="py-2 text-right opacity-70" id="v-mobile-pct">–</td></tr>
+                                <tr class="border-b border-white/10"><td class="py-2">Tablet</td><td class="py-2 text-right font-bold" id="v-tablet">0</td><td class="py-2 text-right opacity-70" id="v-tablet-pct">–</td></tr>
+                                <tr class="border-b border-white/10"><td class="py-2">Desktop</td><td class="py-2 text-right font-bold" id="v-desktop">0</td><td class="py-2 text-right opacity-70" id="v-desktop-pct">–</td></tr>
+                                <tr><td class="py-2">Unknown</td><td class="py-2 text-right font-bold" id="v-unknown">0</td><td class="py-2 text-right opacity-70" id="v-unknown-pct">–</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="stat-card">
-                <span id="r-total" class="stat-number">0</span>
-                <span class="stat-label">Total Ratings</span>
+        <!-- ============ RATERS ============ -->
+        <div class="stats-group">
+            <h2 class="section-heading">Raters</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="stat-card">
+                    <span id="r-total" class="stat-number">0</span>
+                    <span class="stat-label">Total Ratings</span>
+                </div>
+                <div class="stat-card">
+                    <span id="r-users" class="stat-number">0</span>
+                    <span class="stat-label">Unique Users</span>
+                </div>
+                <div class="stat-card">
+                    <span id="r-beers" class="stat-number">0</span>
+                    <span class="stat-label">Beers Rated</span>
+                </div>
             </div>
-            <div class="stat-card">
-                <span id="r-users" class="stat-number">0</span>
-                <span class="stat-label">Unique Users</span>
-            </div>
-            <div class="stat-card">
-                <span id="r-beers" class="stat-number">0</span>
-                <span class="stat-label">Beers Rated</span>
-            </div>
-        </div>
 
         <!-- Highlights Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -415,6 +489,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                 </table>
             </div>
         </div>
+        </div>
     </div>
 
     <script>
@@ -449,6 +524,91 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         }
 
         /**
+         * Renders the visitor trend as an inline SVG line chart.
+         */
+        function renderVisitorChart(series) {
+            const host = document.getElementById('visitor-chart');
+            if (!host) return;
+            const data = Array.isArray(series) ? series : [];
+            if (data.length === 0) { host.innerHTML = ''; return; }
+
+            const W = 760, H = 240;
+            const padL = 32, padR = 12, padT = 16, padB = 28;
+            const plotW = W - padL - padR;
+            const plotH = H - padT - padB;
+            const n = data.length;
+            const counts = data.map(d => Number(d.count) || 0);
+            const maxY = Math.max(...counts, 1);
+            const peakVal = Math.max(...counts);
+            const peakIdx = counts.indexOf(peakVal);
+            const hasPeak = peakVal > 0;
+
+            const px = i => padL + (n === 1 ? plotW / 2 : plotW * i / (n - 1));
+            const py = c => padT + plotH - (plotH * c / maxY);
+            const fmtDate = ds => {
+                const p = String(ds).split('-');
+                return p.length === 3 ? p[2] + '/' + p[1] : ds;
+            };
+
+            const linePts = counts.map((c, i) => px(i).toFixed(1) + ',' + py(c).toFixed(1)).join(' ');
+            const baseY = (padT + plotH).toFixed(1);
+            const areaPts = padL + ',' + baseY + ' ' + linePts + ' ' + px(n - 1).toFixed(1) + ',' + baseY;
+
+            let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" '
+                + 'preserveAspectRatio="xMidYMid meet" style="min-width:520px;width:100%;height:100%;display:block;">';
+
+            [0, maxY].forEach(v => {
+                const y = py(v).toFixed(1);
+                svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y
+                    + '" stroke="var(--divider-color)" stroke-width="1" opacity="0.4"/>';
+                svg += '<text x="' + (padL - 6) + '" y="' + y + '" text-anchor="end" dominant-baseline="middle" '
+                    + 'font-size="11" fill="var(--card-paragraph-color)">' + v + '</text>';
+            });
+
+            if (hasPeak) {
+                const xp = px(peakIdx).toFixed(1);
+                svg += '<line x1="' + xp + '" y1="' + py(peakVal).toFixed(1) + '" x2="' + xp + '" y2="'
+                    + (padT + plotH) + '" stroke="var(--palette-text-primary)" stroke-width="1" '
+                    + 'stroke-dasharray="3 3" opacity="0.5"/>';
+            }
+
+            svg += '<polygon points="' + areaPts + '" fill="var(--palette-text-primary)" opacity="0.12"/>';
+            svg += '<polyline points="' + linePts + '" fill="none" stroke="var(--palette-text-primary)" '
+                + 'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+
+            data.forEach((d, i) => {
+                const isPeak = hasPeak && i === peakIdx;
+                svg += '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(counts[i]).toFixed(1) + '" '
+                    + 'r="' + (isPeak ? 4 : 2.5) + '" fill="var(--palette-text-primary)"'
+                    + (isPeak ? ' stroke="var(--card-background-color)" stroke-width="1.5"' : '')
+                    + '><title>' + fmtDate(d.date) + ': ' + counts[i] + '</title></circle>';
+            });
+
+            if (hasPeak) {
+                const ly = Math.max(py(peakVal) - 8, 11);
+                svg += '<text x="' + px(peakIdx).toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="middle" '
+                    + 'font-size="11" font-weight="600" fill="var(--palette-text-primary)">' + peakVal + '</text>';
+            }
+
+            const step = Math.max(1, Math.round(n / 7));
+            const forced = hasPeak ? [0, n - 1, peakIdx] : [0, n - 1];
+            const ticks = new Set(forced);
+            for (let i = step; i < n - 1; i += step) {
+                if (forced.every(f => Math.abs(f - i) > 1)) ticks.add(i);
+            }
+            const labelIdx = Array.from(ticks).sort((a, b) => a - b);
+            labelIdx.forEach(i => {
+                const isPeak = hasPeak && i === peakIdx;
+                svg += '<text x="' + px(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" '
+                    + (isPeak ? 'font-weight="600" ' : '')
+                    + 'fill="var(--card-paragraph-color)">' + fmtDate(data[i].date) + '</text>';
+            });
+
+            svg += '</svg>';
+            host.innerHTML = svg;
+        }
+
+        /**
          * Updates the DOM with calculated metrics.
          */
         function updateUI(data) {
@@ -456,6 +616,17 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             document.getElementById('v-total').textContent = data.visitors.total;
             document.getElementById('v-yes').textContent = data.visitors.yes;
             document.getElementById('v-no').textContent = data.visitors.no;
+
+            // Devices
+            const devices = data.visitors.devices || {};
+            const deviceTotal = Number(data.visitors.total) || 0;
+            ['mobile', 'tablet', 'desktop', 'unknown'].forEach(key => {
+                const count = Number(devices[key]) || 0;
+                document.getElementById('v-' + key).textContent = count;
+                document.getElementById('v-' + key + '-pct').textContent =
+                    deviceTotal > 0 ? Math.round(count / deviceTotal * 100) + '%' : '–';
+            });
+            renderVisitorChart(data.visitors.daily || []);
 
             // Engagement
             document.getElementById('r-total').textContent = data.engagement.total_ratings;
