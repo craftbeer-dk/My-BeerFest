@@ -707,14 +707,12 @@ if (is_readable($styleGroupsFile)) {
                     <h3 class="text-lg font-semibold mb-2"><?php echo htmlspecialchars($translations['sorting_heading'] ?? 'Sorting'); ?></h3>
                     <div class="flex flex-col md:flex-row md:items-center gap-4">
                         <select id="sort-by" class="w-full md:w-auto">
+                            <option value="brewery-asc"><?php echo htmlspecialchars($translations['sort_brewery_asc'] ?? 'Brewery (A-Z)'); ?></option>
                             <option value="name-asc"><?php echo htmlspecialchars($translations['sort_name_asc'] ?? 'Name (A-Z)'); ?></option>
-                            <option value="name-desc"><?php echo htmlspecialchars($translations['sort_name_desc'] ?? 'Name (Z-A)'); ?></option>
                             <option value="alc-asc"><?php echo htmlspecialchars($translations['sort_alc_asc'] ?? 'Alcohol (Low-High)'); ?></option>
                             <option value="alc-desc"><?php echo htmlspecialchars($translations['sort_alc_desc'] ?? 'Alcohol (High-Low)'); ?></option>
                             <option value="rating-desc"><?php echo htmlspecialchars($translations['sort_global_rating_desc'] ?? 'Global Rating (High-Low)'); ?></option>
-                            <option value="rating-asc"><?php echo htmlspecialchars($translations['sort_global_rating_asc'] ?? 'Global Rating (Low-High)'); ?></option>
                             <option value="my-rating-desc"><?php echo htmlspecialchars($translations['sort_my_rating_desc'] ?? 'My Rating (High-Low)'); ?></option>
-                            <option value="my-rating-asc"><?php echo htmlspecialchars($translations['sort_my_rating_asc'] ?? 'My Rating (Low-High)'); ?></option>
 <?php if (!empty($routes)): ?>
                             <option value="route-order"><?php echo htmlspecialchars($translations['sort_route_order'] ?? 'Route order'); ?></option>
 <?php endif; ?>
@@ -966,12 +964,12 @@ if (is_readable($styleGroupsFile)) {
                         myRatedFilter.checked = savedSettings.myRated || false;
                         unratedFilter.checked = savedSettings.unrated || false;
                         myFavoritesFilter.checked = savedSettings.myFavorites || false;
-                        sortBy.value = savedSettings.sortBy || 'name-asc';
+                        sortBy.value = savedSettings.sortBy || 'brewery-asc';
                         // Fall back to a sane sort if the saved option is gone (e.g. routes
                         // removed) or "route-order" was restored without a selected route.
                         if (sortBy.selectedIndex < 0 ||
                             (sortBy.value === 'route-order' && !(routeFilter && routeFilter.value))) {
-                            sortBy.value = 'name-asc';
+                            sortBy.value = 'brewery-asc';
                         }
                         toggleSection(filterSortContent, filterSortToggleIcon, savedSettings.filterSortCollapsed);
                     } else {
@@ -1202,6 +1200,9 @@ if (is_readable($styleGroupsFile)) {
                 let filteredBeers = [...allBeers];
                 const currentRoute = (routeFilter && routeFilter.value) ? routes.find(r => r.name === routeFilter.value) : null;
                 const routePos = currentRoute ? new Map(currentRoute.beers.map((id, i) => [id, i])) : null;
+                // The "Route order" sort only means something while a route is selected; grey it out otherwise.
+                const routeSortOption = sortBy.querySelector('option[value="route-order"]');
+                if (routeSortOption) routeSortOption.disabled = !currentRoute;
                 const searchTerm = searchInput.value.trim().replace(/\s+/g, ' ').toLowerCase();
                 
                 if (searchTerm) {
@@ -1226,13 +1227,11 @@ if (is_readable($styleGroupsFile)) {
                     const myRatingB = userRatings[b.id] || 0;
                     switch (sortOption) {
                         case 'name-asc': return a.name.localeCompare(b.name);
-                        case 'name-desc': return b.name.localeCompare(a.name);
+                        case 'brewery-asc': return a.brewery.localeCompare(b.brewery);
                         case 'alc-asc': return (a.alc || 0) - (b.alc || 0);
                         case 'alc-desc': return (b.alc || 0) - (a.alc || 0);
                         case 'rating-desc': return (b.rating || 0) - (a.rating || 0);
-                        case 'rating-asc': return (a.rating || 0) - (b.rating || 0);
                         case 'my-rating-desc': return myRatingB - myRatingA;
-                        case 'my-rating-asc': return myRatingA - myRatingB;
                         case 'route-order': return routePos ? (routePos.get(a.id) - routePos.get(b.id)) : 0;
                         default: return 0;
                     }
@@ -1462,7 +1461,7 @@ if (is_readable($styleGroupsFile)) {
                         // Repopulate for the new session; a still-valid selection is preserved,
                         // otherwise it resets to '' and we drop the now-meaningless route sort.
                         populateRouteOptions();
-                        if (!routeFilter.value && sortBy.value === 'route-order') sortBy.value = 'name-asc';
+                        if (!routeFilter.value && sortBy.value === 'route-order') sortBy.value = 'brewery-asc';
                     }
                     saveState();
                     renderBeers();
@@ -1484,7 +1483,7 @@ if (is_readable($styleGroupsFile)) {
                             clearSearchBtn.classList.add('hidden');
                             sortBy.value = 'route-order';
                         } else if (sortBy.value === 'route-order') {
-                            sortBy.value = 'name-asc';
+                            sortBy.value = 'brewery-asc';
                         }
                         saveState();
                         renderBeers();
@@ -1536,7 +1535,7 @@ if (is_readable($styleGroupsFile)) {
                         myFavoritesFilter.checked = false;
                         clearSearchBtn.classList.add('hidden');
                         if (routeFilter) routeFilter.value = '';
-                        if (sortBy.value === 'route-order') sortBy.value = 'name-asc';
+                        if (sortBy.value === 'route-order') sortBy.value = 'brewery-asc';
                     } else {
                         sessionFilter.value = '';
                         // Session no longer constrains the route list — show all routes again.
