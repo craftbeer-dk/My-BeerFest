@@ -84,7 +84,7 @@ Run the automated smoke tests (requires the app to be running):
 ./tests/smoke_test.sh
 ```
 
-This runs ~39 assertions covering page loads, API validation, auth gates, XSS escaping, and CSRF protection. Override defaults with env vars:
+This runs ~58 assertions covering page loads, API validation, auth gates, XSS escaping, and CSRF protection. Override defaults with env vars:
 
 ```bash
 BASE_URL=http://localhost:8181 ADMIN_USER=admin ADMIN_PASS=changeme ./tests/smoke_test.sh
@@ -100,6 +100,7 @@ src/                  # Application source (mounted into containers)
   admin_api.php       # Admin REST API
   log_rating.php      # POST API — log a beer rating
   log_cookie_consent.php  # POST API — log consent choice
+  health.php          # GET /health — liveness probe (200/503)
   my_stats.php        # Personal statistics page
   privacy-policy.php  # GDPR privacy policy
   manifest.php        # PWA web manifest
