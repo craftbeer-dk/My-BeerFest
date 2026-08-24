@@ -42,4 +42,7 @@ COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 COPY nginx/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/health || exit 1
+
 ENTRYPOINT ["sh", "/entrypoint.sh"]

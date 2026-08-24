@@ -108,6 +108,28 @@ assert_file_contains "safeUrl used in beer card href" "$MAIN_FILE" "safeUrl(beer
 assert_file_contains "escAttr used on data-beer-name" "$MAIN_FILE" "escAttr(beer.name)"
 
 # ══════════════════════════════════════════════════════════════════════
+# 1b. HEALTH PROBE
+# ══════════════════════════════════════════════════════════════════════
+printf "\n\033[1m▸ Health probe\033[0m\n"
+
+HEALTH_FILE="$TMPDIR_TEST/health.json"
+curl -s "$BASE_URL/health" > "$HEALTH_FILE"
+assert_status "GET /health returns 200" "$BASE_URL/health" 200
+assert_file_contains "Health reports ok" "$HEALTH_FILE" '"status": "ok"'
+assert_file_contains "Health reports catalog present" "$HEALTH_FILE" '"catalog_present": true'
+HEALTH_HDRS="$TMPDIR_TEST/health.hdr"
+curl -s -D "$HEALTH_HDRS" -o /dev/null "$BASE_URL/health"
+assert_header "Health is not cached" "$HEALTH_HDRS" "Cache-Control: no-store"
+
+HEALTH_DEEP="$TMPDIR_TEST/health-deep.json"
+curl -s "$BASE_URL/health?deep=1" > "$HEALTH_DEEP"
+assert_file_contains "Deep health validates the catalog" "$HEALTH_DEEP" '"catalog_valid": true'
+
+# The body is public, so it must not leak filesystem detail.
+assert_file_not_contains "Health does not leak paths" "$HEALTH_FILE" "/var/"
+assert_file_not_contains "Health does not leak the document root" "$HEALTH_FILE" "/var/www"
+
+# ══════════════════════════════════════════════════════════════════════
 # 2. BEER DATA
 # ══════════════════════════════════════════════════════════════════════
 printf "\n\033[1m▸ Beer data\033[0m\n"
