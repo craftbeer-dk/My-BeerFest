@@ -672,7 +672,7 @@ if (is_readable($styleGroupsFile)) {
             <p class="filter-summary" id="filter-summary"></p>
             <div class="section-content" id="filter-sort-content">
                 <!-- Filter Controls -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-2">
                     <div>
                         <label for="session-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_session'] ?? 'Session'); ?>:</label>
                         <select id="session-filter" class="w-full">
