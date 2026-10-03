@@ -1,6 +1,6 @@
 // Service Worker for PWA functionality (caching and offline support)
 
-const CACHE_NAME = 'beerfest-cache-v8';
+const CACHE_NAME = 'beerfest-cache-v9';
 
 // Files pre-cached on install so the app shell loads offline on first launch.
 // "/" is the canonical app entry — index.php is served at "/" by nginx, so
