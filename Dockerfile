@@ -10,6 +10,10 @@ COPY src/ ./src/
 
 RUN npx tailwindcss -i src/input.css -o dist/style.css --minify
 
+# Stamp the release version into the service worker cache name
+ARG APP_VERSION=dev
+RUN sed -i "s/__APP_VERSION__/${APP_VERSION}/" src/sw.js
+
 # Stage 2: PHP-FPM Image
 FROM php:8.2-fpm-alpine AS php
 
@@ -22,8 +26,9 @@ WORKDIR /var/www/html
 # Copy the PHP source code
 COPY src/ .
 
-# Copy ONLY the compiled CSS from the build stage
+# Copy ONLY the compiled CSS and versioned service worker from the build stage
 COPY --from=css-build /build/dist/style.css ./dist/style.css
+COPY --from=css-build /build/src/sw.js ./sw.js
 
 EXPOSE 9000
 CMD ["php-fpm"]
@@ -34,8 +39,9 @@ FROM nginx:stable-alpine AS nginx
 # Copy static web files
 COPY src/ /var/www/html/
 
-# Copy compiled CSS from the build stage
+# Copy compiled CSS and versioned service worker from the build stage
 COPY --from=css-build /build/dist/style.css /var/www/html/dist/style.css
+COPY --from=css-build /build/src/sw.js /var/www/html/sw.js
 
 # Copy nginx config and entrypoint
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
