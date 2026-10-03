@@ -214,6 +214,51 @@ curl -s -D "$CONSENT_HDRS" -o /dev/null -X POST "$BASE_URL/log_cookie_consent.ph
 assert_no_header "No wildcard CORS on consent endpoint" "$CONSENT_HDRS" "Access-Control-Allow-Origin: \*"
 
 # ══════════════════════════════════════════════════════════════════════
+# 4b. INTERACTION EVENT ENDPOINT
+# ══════════════════════════════════════════════════════════════════════
+printf "\n\033[1m▸ Interaction event endpoint (log_event.php)\033[0m\n"
+
+assert_status "Valid event batch returns 204" \
+    "$BASE_URL/log_event.php" 204 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"filter_change","data":{"filter":"style","value":"IPA","results":3}}]}'
+
+assert_status "Valid app_open and install events return 204" \
+    "$BASE_URL/log_event.php" 204 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"app_open","data":{"mode":"standalone","source":"load","platform":"ios"}},{"type":"install","data":{"step":"banner_shown","platform":"android"}}]}'
+
+assert_status "Batch with only unknown event types returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"evil","data":{"x":"y"}}]}'
+
+assert_status "Missing session_id returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"events":[{"type":"sort_change","data":{"value":"name-asc"}}]}'
+
+OVERSIZED_BATCH=$(python3 -c "import json; print(json.dumps({'session_id':'smoke-test','events':[{'type':'sort_change','data':{'value':'x'}}]*26}))")
+assert_status "Oversized batch returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d "$OVERSIZED_BATCH"
+
+assert_status "Malformed JSON returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{bad json}'
+
+assert_status "GET method returns 405" \
+    "$BASE_URL/log_event.php" 405
+
+EVENT_HDRS="$TMPDIR_TEST/event_headers.txt"
+curl -s -D "$EVENT_HDRS" -o /dev/null -X POST "$BASE_URL/log_event.php" \
+    -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"panel_toggle","data":{"open":true,"auto":false}}]}'
+assert_no_header "No wildcard CORS on event endpoint" "$EVENT_HDRS" "Access-Control-Allow-Origin: \*"
+
+# ══════════════════════════════════════════════════════════════════════
 # 5. STATS PAGE
 # ══════════════════════════════════════════════════════════════════════
 printf "\n\033[1m▸ Stats page (stats.php)\033[0m\n"

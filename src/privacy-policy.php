@@ -157,6 +157,7 @@ $contactEmail = getenv('CONTACT_EMAIL') ?: 'contact@mybeerfest.com';
             <ul>
                 <li><strong><?php echo t('session_id_label'); ?></strong> <?php echo t('session_id_desc'); ?></li>
                 <li><strong><?php echo t('beer_id_name_label'); ?></strong> <?php echo t('beer_id_name_desc'); ?></li>
+                <li><strong><?php echo t('interaction_data_label'); ?></strong> <?php echo t('interaction_data_desc'); ?></li>
                 <li><strong><?php echo t('timestamp_label'); ?></strong> <?php echo t('timestamp_desc'); ?></li>
             </ul>
 

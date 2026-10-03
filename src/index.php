@@ -886,6 +886,16 @@ if (is_readable($styleGroupsFile)) {
             let countryFlags = {};
             let validBeerIds = new Set();
             let lastFetchTimestamp = 0;
+            let lastResultCount = 0;
+            let eventQueue = [];
+            let eventFlushTimer = null;
+            let searchLogTimer = null;
+            let appOpenTracked = false;
+            let hiddenAt = null;
+            const RESUME_AFTER_MS = 30 * 60 * 1000;
+            const devicePlatform = (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) ? 'ios'
+                : /Android/i.test(navigator.userAgent) ? 'android' : 'other';
+            const displayMode = (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches) ? 'standalone' : 'browser';
             const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
             
             // Pagination state
@@ -1237,6 +1247,44 @@ if (is_readable($styleGroupsFile)) {
                 }).catch(error => console.error('Error sending rating log:', error));
             }
 
+            function trackEvent(type, data) {
+                if (!enableStatisticsLogging || statsConsent !== 'true') return;
+                eventQueue.push({ type, data });
+                if (eventQueue.length >= 20) {
+                    flushEvents();
+                } else if (!eventFlushTimer) {
+                    eventFlushTimer = setTimeout(flushEvents, 10000);
+                }
+            }
+
+            function trackAppOpen(source) {
+                trackEvent('app_open', { mode: displayMode, source, platform: devicePlatform });
+            }
+
+            // Safari gives no install events, so count the first consented launch as an installed app.
+            function trackFirstLaunch() {
+                if (!enableStatisticsLogging || statsConsent !== 'true' || displayMode !== 'standalone') return;
+                try {
+                    if (localStorage.getItem('standaloneLaunched')) return;
+                    trackEvent('install', { step: 'first_launch', platform: devicePlatform });
+                    localStorage.setItem('standaloneLaunched', Date.now().toString());
+                } catch (e) {}
+            }
+            window.trackEvent = trackEvent;
+
+            function flushEvents() {
+                clearTimeout(eventFlushTimer);
+                eventFlushTimer = null;
+                while (eventQueue.length > 0) {
+                    fetch('log_event.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: sessionId, events: eventQueue.splice(0, 25) }),
+                        keepalive: true,
+                    }).catch(error => console.error('Error sending event log:', error));
+                }
+            }
+
             function logStatsConsentToServer(consent) {
                 if (!enableStatisticsLogging) return;
                 fetch('log_cookie_consent.php', {
@@ -1286,6 +1334,8 @@ if (is_readable($styleGroupsFile)) {
                         default: return 0;
                     }
                 });
+
+                lastResultCount = filteredBeers.length;
 
                 // Pagination visibility logic
                 if (filteredBeers.length > displayedCount) {
@@ -1426,7 +1476,15 @@ if (is_readable($styleGroupsFile)) {
             }
 
             function setStatsConsent(consent, fromUserInteraction = false) {
+                const wasConsented = statsConsent === 'true';
                 statsConsent = consent ? 'true' : 'false';
+                if (consent && !wasConsented && fromUserInteraction) {
+                    trackAppOpen('load');
+                    trackFirstLaunch();
+                }
+                if (!consent) {
+                    try { localStorage.removeItem('standaloneLaunched'); } catch (e) {}
+                }
                 
                 if(consentBanner) consentBanner.classList.add('hidden');
 
@@ -1498,11 +1556,27 @@ if (is_readable($styleGroupsFile)) {
                 // changing the session repopulates the route dropdown.
                 const allFilters = [styleFilter, breweryFilter, countryFilter, sortBy, myRatedFilter, unratedFilter, myFavoritesFilter];
 
+                const filterNames = {
+                    'session-filter': 'session', 'route-filter': 'route', 'style-filter': 'style',
+                    'brewery-filter': 'brewery', 'country-filter': 'country', 'my-rated-filter': 'my_rated',
+                    'unrated-filter': 'unrated', 'my-favorites-filter': 'favorites'
+                };
+                const trackFilterChange = el => trackEvent('filter_change', {
+                    filter: filterNames[el.id],
+                    value: el.type === 'checkbox' ? (el.checked ? 'on' : 'off') : el.value,
+                    results: lastResultCount
+                });
+
                 allFilters.forEach(el => el.addEventListener('input', () => {
                     displayedCount = ITEMS_PER_PAGE; // Reset to page 1 on filter change
                     saveState();
                     renderBeers();
                     updateClearButtonState();
+                    if (el === sortBy) {
+                        trackEvent('sort_change', { value: sortBy.value });
+                    } else {
+                        trackFilterChange(el);
+                    }
                 }));
 
                 sessionFilter.addEventListener('input', () => {
@@ -1516,6 +1590,7 @@ if (is_readable($styleGroupsFile)) {
                     saveState();
                     renderBeers();
                     updateClearButtonState();
+                    trackFilterChange(sessionFilter);
                 });
 
                 if (routeFilter) {
@@ -1538,6 +1613,7 @@ if (is_readable($styleGroupsFile)) {
                         saveState();
                         renderBeers();
                         updateClearButtonState();
+                        trackFilterChange(routeFilter);
                     });
                 }
 
@@ -1547,6 +1623,11 @@ if (is_readable($styleGroupsFile)) {
                     saveState();
                     renderBeers();
                     updateClearButtonState();
+                    clearTimeout(searchLogTimer);
+                    searchLogTimer = setTimeout(() => {
+                        const term = searchInput.value.trim().replace(/\s+/g, ' ').toLowerCase();
+                        if (term.length >= 2) trackEvent('search', { term: term.slice(0, 50), results: lastResultCount });
+                    }, 1500);
                 });
 
                 clearSearchBtn.addEventListener('click', () => {
@@ -1595,11 +1676,13 @@ if (is_readable($styleGroupsFile)) {
                     saveState();
                     renderBeers();
                     updateClearButtonState();
+                    trackEvent('filter_clear', { cleared: areOtherFiltersActive ? 'filters' : 'session' });
                 });
 
                 filterSortHeader.addEventListener('click', () => {
                     toggleSection(filterSortContent, filterSortToggleIcon, null, true);
                     setTimeout(saveState, 10);
+                    trackEvent('panel_toggle', { open: !filterSortContent.classList.contains('collapsed'), auto: false });
                 });
 
                 let autoCollapseQueued = false;
@@ -1621,6 +1704,7 @@ if (is_readable($styleGroupsFile)) {
                         filterSortContent.style.transition = '';
                         filterSortHeader.style.transition = '';
                         saveState();
+                        trackEvent('panel_toggle', { open: false, auto: true });
                     });
                 }, { passive: true });
 
@@ -1654,7 +1738,13 @@ if (is_readable($styleGroupsFile)) {
                 });
                 
                 document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') {
+                        hiddenAt = Date.now();
+                        flushEvents();
+                    }
                     if (document.visibilityState === 'visible') {
+                        if (hiddenAt && Date.now() - hiddenAt >= RESUME_AFTER_MS) trackAppOpen('resume');
+                        hiddenAt = null;
                         const now = new Date().getTime();
                         if (now - lastFetchTimestamp > REFRESH_INTERVAL) {
                             lastFetchTimestamp = now;
@@ -1676,6 +1766,11 @@ if (is_readable($styleGroupsFile)) {
                 initializeFilters();
                 importDataFromUrlOnLoad();
                 loadState();
+                if (!appOpenTracked) {
+                    appOpenTracked = true;
+                    trackAppOpen('load');
+                    trackFirstLaunch();
+                }
 
                 if (enableStatisticsLogging && statsConsent === null) {
                     if(consentBanner) consentBanner.classList.remove('hidden');
@@ -1789,8 +1884,15 @@ if (is_readable($styleGroupsFile)) {
             return dismissed && (Date.now() - parseInt(dismissed, 10)) < INSTALL_DISMISS_MS;
         }
 
+        function trackInstall(step) {
+            if (window.trackEvent) window.trackEvent('install', { step, platform: installPlatform });
+        }
+
         function showBannerWithDelay(banner) {
-            if (banner) setTimeout(() => banner.classList.remove('hidden'), INSTALL_SHOW_DELAY);
+            if (banner) setTimeout(() => {
+                banner.classList.remove('hidden');
+                trackInstall('banner_shown');
+            }, INSTALL_SHOW_DELAY);
         }
 
         // --- Android/Desktop install (beforeinstallprompt) ---
@@ -1810,7 +1912,8 @@ if (is_readable($styleGroupsFile)) {
             installButton.addEventListener('click', () => {
                 if (!deferredPrompt) return;
                 deferredPrompt.prompt();
-                deferredPrompt.userChoice.then(() => {
+                deferredPrompt.userChoice.then(choice => {
+                    trackInstall(choice.outcome === 'accepted' ? 'prompt_accepted' : 'prompt_declined');
                     deferredPrompt = null;
                     if (installBanner) installBanner.classList.add('hidden');
                 });
@@ -1821,12 +1924,14 @@ if (is_readable($styleGroupsFile)) {
             dismissButton.addEventListener('click', () => {
                 localStorage.setItem('installDismissed', Date.now().toString());
                 if (installBanner) installBanner.classList.add('hidden');
+                trackInstall('banner_dismissed');
             });
         }
 
         window.addEventListener('appinstalled', () => {
             if (installBanner) installBanner.classList.add('hidden');
             deferredPrompt = null;
+            trackInstall('installed');
         });
 
         // --- iOS install guide ---
@@ -1834,6 +1939,7 @@ if (is_readable($styleGroupsFile)) {
         const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
         // Safari on iOS: no CriOS (Chrome), no FxiOS (Firefox), no OPiOS (Opera)
         const isIosSafari = isIos && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
+        const installPlatform = isIosSafari ? 'ios' : isIos ? 'ios_other_browser' : /Android/i.test(navigator.userAgent) ? 'android' : 'other';
 
         if (isIos && !isStandalone && !isInstallDismissed()) {
             if (isIosSafari) {
@@ -1847,6 +1953,7 @@ if (is_readable($styleGroupsFile)) {
             btn.addEventListener('click', () => {
                 localStorage.setItem('installDismissed', Date.now().toString());
                 btn.closest('.install-banner').classList.add('hidden');
+                trackInstall('banner_dismissed');
             });
         });
     </script>
