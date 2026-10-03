@@ -398,10 +398,20 @@ assert_status "Stats JSON with exclude_raters param returns 200" \
     "$BASE_URL/stats.php?format=json&exclude_raters=1" 200 \
     -u "$STATS_USER:$STATS_PASS"
 
-# Stats with device filter param (affects Visitors only)
+# Stats with device filter param (affects the Consent tab only)
 assert_status "Stats JSON with device filter param returns 200" \
     "$BASE_URL/stats.php?format=json&device=mobile" 200 \
     -u "$STATS_USER:$STATS_PASS"
+
+# Per-tab device filters for Usage and Filters & Search
+TAB_STATS="$TMPDIR_TEST/tab_stats.json"
+curl -s -o "$TAB_STATS" -u "$STATS_USER:$STATS_PASS" \
+    "$BASE_URL/stats.php?format=json&usage_device=desktop&filters_device=mobile"
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d['usage']['device_filter']=='desktop' and d['filters']['device_filter']=='mobile' else 1)" "$TAB_STATS" 2>/dev/null; then
+    pass "Stats JSON applies usage_device and filters_device independently"
+else
+    fail "Stats JSON usage_device / filters_device not applied"
+fi
 
 # ══════════════════════════════════════════════════════════════════════
 # 9. TASTING ROUTES API
