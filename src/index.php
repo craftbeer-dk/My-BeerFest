@@ -674,7 +674,7 @@ if (is_readable($styleGroupsFile)) {
                 <!-- Filter Controls -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
-                        <label for="session-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_session'] ?? 'Filter by Session'); ?>:</label>
+                        <label for="session-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_session'] ?? 'Session'); ?>:</label>
                         <select id="session-filter" class="w-full">
                             <option value=""><?php echo htmlspecialchars($translations['all_sessions'] ?? 'All Sessions'); ?></option>
                         </select>
@@ -688,19 +688,19 @@ if (is_readable($styleGroupsFile)) {
                     </div>
 <?php endif; ?>
                     <div>
-                        <label for="style-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_style'] ?? 'Filter by Style'); ?>:</label>
+                        <label for="style-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_style'] ?? 'Style'); ?>:</label>
                         <select id="style-filter" class="w-full">
                             <option value=""><?php echo htmlspecialchars($translations['all_styles'] ?? 'All Styles'); ?></option>
                         </select>
                     </div>
                     <div>
-                        <label for="brewery-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_brewery'] ?? 'Filter by Brewery'); ?>:</label>
+                        <label for="brewery-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_brewery'] ?? 'Brewery'); ?>:</label>
                         <select id="brewery-filter" class="w-full">
                             <option value=""><?php echo htmlspecialchars($translations['all_breweries'] ?? 'All Breweries'); ?></option>
                         </select>
                     </div>
                     <div>
-                        <label for="country-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_country'] ?? 'Filter by Country'); ?>:</label>
+                        <label for="country-filter" class="block"><?php echo htmlspecialchars($translations['filter_by_country'] ?? 'Country'); ?>:</label>
                         <select id="country-filter" class="w-full">
                             <option value=""><?php echo htmlspecialchars($translations['all_countries'] ?? 'All Countries'); ?></option>
                         </select>
