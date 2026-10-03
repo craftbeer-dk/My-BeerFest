@@ -1549,9 +1549,29 @@ if (is_readable($styleGroupsFile)) {
 
                 filterSortHeader.addEventListener('click', () => {
                     toggleSection(filterSortContent, filterSortToggleIcon);
-                    setTimeout(saveState, 10); 
+                    setTimeout(saveState, 10);
                 });
-                
+
+                let autoCollapseQueued = false;
+                window.addEventListener('scroll', () => {
+                    if (autoCollapseQueued || filterSortContent.classList.contains('collapsed')) return;
+                    autoCollapseQueued = true;
+                    requestAnimationFrame(() => {
+                        autoCollapseQueued = false;
+                        if (filterSortContent.classList.contains('collapsed')) return;
+                        if (filterSortContent.getBoundingClientRect().bottom > 0) return;
+
+                        const anchorTopBefore = beerListContainer.getBoundingClientRect().top;
+                        filterSortContent.style.transition = 'none';
+                        toggleSection(filterSortContent, filterSortToggleIcon, true);
+                        const shift = beerListContainer.getBoundingClientRect().top - anchorTopBefore;
+                        if (shift !== 0) window.scrollBy(0, shift);
+                        filterSortContent.offsetHeight;
+                        filterSortContent.style.transition = '';
+                        saveState();
+                    });
+                }, { passive: true });
+
                 copyDataButton.addEventListener('click', copyShareableLink);
                 importDataButton.addEventListener('click', () => {
                     const link = prompt(translations['paste_import_link_prompt'] ?? 'Please paste the link to import your data:');
