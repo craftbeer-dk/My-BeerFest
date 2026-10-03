@@ -504,6 +504,10 @@ if (is_readable($styleGroupsFile)) {
             font-weight: 600;
             color: var(--header-text-color);
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: margin-bottom 0.3s ease-in-out;
+        }
+        .filter-sort-section:has(> .section-content.collapsed) > .section-header {
+            margin-bottom: 0;
         }
         .section-header:hover {
             background-color: var(--header-hover-bg);
@@ -526,6 +530,24 @@ if (is_readable($styleGroupsFile)) {
             padding-bottom: 0;
             border: none;
             box-shadow: none;
+        }
+        .filter-summary {
+            max-height: 0;
+            opacity: 0;
+            margin: 0;
+            padding: 0 1rem;
+            font-size: 0.875rem;
+            color: var(--card-paragraph-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out;
+        }
+        .filter-summary.visible {
+            max-height: 1.5rem;
+            opacity: 1;
+            margin-top: 0.5rem;
+            transition-delay: 0.35s;
         }
         .toggle-icon {
             display: inline-block;
@@ -647,6 +669,7 @@ if (is_readable($styleGroupsFile)) {
                 <h2 class="text-xl font-bold flex-grow text-left"><?php echo htmlspecialchars($translations['filters_and_sorting_heading'] ?? 'Filters & Sorting'); ?></h2>
                 <span class="toggle-icon">&#9660;</span>
             </div>
+            <p class="filter-summary" id="filter-summary"></p>
             <div class="section-content" id="filter-sort-content">
                 <!-- Filter Controls -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -730,11 +753,13 @@ if (is_readable($styleGroupsFile)) {
                     if (shouldCollapse) {
                         var el = document.getElementById('filter-sort-content');
                         el.style.transition = 'none';
+                        document.getElementById('filter-sort-header').style.transition = 'none';
                         el.classList.add('collapsed');
                         document.querySelector('#filter-sort-header .toggle-icon').classList.add('rotated');
                         // Force reflow then restore transitions
                         el.offsetHeight;
                         el.style.transition = '';
+                        document.getElementById('filter-sort-header').style.transition = '';
                     }
                 } catch(e) {}
             })();
@@ -902,6 +927,7 @@ if (is_readable($styleGroupsFile)) {
             const filterSortHeader = document.getElementById('filter-sort-header');
             const filterSortContent = document.getElementById('filter-sort-content');
             const filterSortToggleIcon = filterSortHeader.querySelector('.toggle-icon');
+            const filterSummary = document.getElementById('filter-summary');
 
             // --- Functions (full definitions) ---
 
@@ -1094,7 +1120,7 @@ if (is_readable($styleGroupsFile)) {
                 }
             }
 
-            function toggleSection(contentElement, iconElement, forceCollapse = null) {
+            function toggleSection(contentElement, iconElement, forceCollapse = null, animate = false) {
                 const isCollapsed = contentElement.classList.contains('collapsed');
                 const shouldCollapse = forceCollapse !== null ? forceCollapse : !isCollapsed;
                 
@@ -1104,6 +1130,29 @@ if (is_readable($styleGroupsFile)) {
                 } else {
                     contentElement.classList.remove('collapsed');
                     iconElement.classList.remove('rotated');
+                }
+                updateFilterSummary(animate);
+            }
+
+            function updateFilterSummary(animate = false) {
+                const selectText = sel => (sel && sel.value) ? sel.options[sel.selectedIndex].text : '';
+                const parts = [
+                    selectText(sessionFilter),
+                    selectText(routeFilter),
+                    selectText(breweryFilter),
+                    selectText(styleFilter),
+                    selectText(countryFilter),
+                    myRatedFilter.checked ? (translations['my_rated_beers'] ?? 'My Rated Beers') : '',
+                    unratedFilter.checked ? (translations['unrated_beers'] ?? 'Unrated Beers') : '',
+                    myFavoritesFilter.checked ? (translations['my_favorites'] ?? 'My Favorites') : ''
+                ].filter(Boolean);
+                filterSummary.textContent = parts.join(', ');
+                const visible = parts.length > 0 && filterSortContent.classList.contains('collapsed');
+                if (!animate) filterSummary.style.transition = 'none';
+                filterSummary.classList.toggle('visible', visible);
+                if (!animate) {
+                    filterSummary.offsetHeight;
+                    filterSummary.style.transition = '';
                 }
             }
             
@@ -1128,6 +1177,7 @@ if (is_readable($styleGroupsFile)) {
                         clearFiltersButton.textContent = translations['clear_session_button'] ?? 'Clear Session';
                     }
                 }
+                updateFilterSummary();
             }
 
             // Order the style dropdown by the optional stylegroups.json config:
@@ -1548,7 +1598,7 @@ if (is_readable($styleGroupsFile)) {
                 });
 
                 filterSortHeader.addEventListener('click', () => {
-                    toggleSection(filterSortContent, filterSortToggleIcon);
+                    toggleSection(filterSortContent, filterSortToggleIcon, null, true);
                     setTimeout(saveState, 10);
                 });
 
@@ -1563,11 +1613,13 @@ if (is_readable($styleGroupsFile)) {
 
                         const anchorTopBefore = beerListContainer.getBoundingClientRect().top;
                         filterSortContent.style.transition = 'none';
+                        filterSortHeader.style.transition = 'none';
                         toggleSection(filterSortContent, filterSortToggleIcon, true);
                         const shift = beerListContainer.getBoundingClientRect().top - anchorTopBefore;
                         if (shift !== 0) window.scrollBy(0, shift);
                         filterSortContent.offsetHeight;
                         filterSortContent.style.transition = '';
+                        filterSortHeader.style.transition = '';
                         saveState();
                     });
                 }, { passive: true });
