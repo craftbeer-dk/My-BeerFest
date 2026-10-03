@@ -214,6 +214,51 @@ curl -s -D "$CONSENT_HDRS" -o /dev/null -X POST "$BASE_URL/log_cookie_consent.ph
 assert_no_header "No wildcard CORS on consent endpoint" "$CONSENT_HDRS" "Access-Control-Allow-Origin: \*"
 
 # ══════════════════════════════════════════════════════════════════════
+# 4b. INTERACTION EVENT ENDPOINT
+# ══════════════════════════════════════════════════════════════════════
+printf "\n\033[1m▸ Interaction event endpoint (log_event.php)\033[0m\n"
+
+assert_status "Valid event batch returns 204" \
+    "$BASE_URL/log_event.php" 204 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"filter_change","data":{"filter":"style","value":"IPA","results":3}}]}'
+
+assert_status "Valid app_open and install events return 204" \
+    "$BASE_URL/log_event.php" 204 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"app_open","data":{"mode":"standalone","source":"load","platform":"ios"}},{"type":"install","data":{"step":"banner_shown","platform":"android"}}]}'
+
+assert_status "Batch with only unknown event types returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"evil","data":{"x":"y"}}]}'
+
+assert_status "Missing session_id returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"events":[{"type":"sort_change","data":{"value":"name-asc"}}]}'
+
+OVERSIZED_BATCH=$(python3 -c "import json; print(json.dumps({'session_id':'smoke-test','events':[{'type':'sort_change','data':{'value':'x'}}]*26}))")
+assert_status "Oversized batch returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d "$OVERSIZED_BATCH"
+
+assert_status "Malformed JSON returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{bad json}'
+
+assert_status "GET method returns 405" \
+    "$BASE_URL/log_event.php" 405
+
+EVENT_HDRS="$TMPDIR_TEST/event_headers.txt"
+curl -s -D "$EVENT_HDRS" -o /dev/null -X POST "$BASE_URL/log_event.php" \
+    -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"panel_toggle","data":{"open":true,"auto":false}}]}'
+assert_no_header "No wildcard CORS on event endpoint" "$EVENT_HDRS" "Access-Control-Allow-Origin: \*"
+
+# ══════════════════════════════════════════════════════════════════════
 # 5. STATS PAGE
 # ══════════════════════════════════════════════════════════════════════
 printf "\n\033[1m▸ Stats page (stats.php)\033[0m\n"
@@ -353,10 +398,20 @@ assert_status "Stats JSON with exclude_raters param returns 200" \
     "$BASE_URL/stats.php?format=json&exclude_raters=1" 200 \
     -u "$STATS_USER:$STATS_PASS"
 
-# Stats with device filter param (affects Visitors only)
+# Stats with device filter param (affects the Consent tab only)
 assert_status "Stats JSON with device filter param returns 200" \
     "$BASE_URL/stats.php?format=json&device=mobile" 200 \
     -u "$STATS_USER:$STATS_PASS"
+
+# Per-tab device filters for Usage and Filters & Search
+TAB_STATS="$TMPDIR_TEST/tab_stats.json"
+curl -s -o "$TAB_STATS" -u "$STATS_USER:$STATS_PASS" \
+    "$BASE_URL/stats.php?format=json&usage_device=desktop&filters_device=mobile"
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d['usage']['device_filter']=='desktop' and d['filters']['device_filter']=='mobile' else 1)" "$TAB_STATS" 2>/dev/null; then
+    pass "Stats JSON applies usage_device and filters_device independently"
+else
+    fail "Stats JSON usage_device / filters_device not applied"
+fi
 
 # ══════════════════════════════════════════════════════════════════════
 # 9. TASTING ROUTES API
