@@ -538,15 +538,18 @@ if (is_readable($styleGroupsFile)) {
             padding: 0 1rem;
             font-size: 0.875rem;
             color: var(--card-paragraph-color);
-            white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
-            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out;
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out, margin-bottom 0.3s ease-in-out;
+        }
+        .filter-summary-label {
+            font-weight: 600;
+            color: var(--label-color);
         }
         .filter-summary.visible {
-            max-height: 1.5rem;
+            max-height: 10rem;
             opacity: 1;
-            margin-top: 0.5rem;
+            margin-top: 0.75rem;
+            margin-bottom: -0.25rem;
             transition-delay: 0.35s;
         }
         .toggle-icon {
@@ -1156,7 +1159,11 @@ if (is_readable($styleGroupsFile)) {
                     unratedFilter.checked ? (translations['unrated_beers'] ?? 'Unrated Beers') : '',
                     myFavoritesFilter.checked ? (translations['my_favorites'] ?? 'My Favorites') : ''
                 ].filter(Boolean);
-                filterSummary.textContent = parts.join(', ');
+                filterSummary.textContent = '';
+                const summaryLabel = document.createElement('span');
+                summaryLabel.className = 'filter-summary-label';
+                summaryLabel.textContent = (translations['active_filters_label'] ?? 'Active filters') + ': ';
+                filterSummary.append(summaryLabel, parts.join(', '));
                 const visible = parts.length > 0 && filterSortContent.classList.contains('collapsed');
                 if (!animate) filterSummary.style.transition = 'none';
                 filterSummary.classList.toggle('visible', visible);
