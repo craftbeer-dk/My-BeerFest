@@ -105,7 +105,7 @@ assert_file_contains "Page contains beer list container" "$MAIN_FILE" "beer-list
 assert_file_contains "escAttr helper present" "$MAIN_FILE" "escAttr"
 assert_file_contains "safeUrl helper present" "$MAIN_FILE" "safeUrl"
 assert_file_contains "safeUrl used in beer card href" "$MAIN_FILE" "safeUrl(beer.untappd)"
-assert_file_contains "escAttr used on data-beer-name" "$MAIN_FILE" "escAttr(beer.name)"
+assert_file_contains "escAttr used on data-beer-id" "$MAIN_FILE" "escAttr(beer.id)"
 
 # ══════════════════════════════════════════════════════════════════════
 # 1b. HEALTH PROBE
@@ -172,6 +172,16 @@ assert_status "Invalid rating value returns 400" \
     -X POST -H "Content-Type: application/json" \
     -d "{\"beer_id\":\"$FIRST_ID\",\"rating\":99,\"session_id\":\"smoke-test\"}"
 
+assert_status "Unknown beer_id returns 400" \
+    "$BASE_URL/log_rating.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"beer_id":"no-such-beer-xyz","rating":4.0,"session_id":"smoke-test"}'
+
+assert_status "Malformed session_id returns 400" \
+    "$BASE_URL/log_rating.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d "{\"beer_id\":\"$FIRST_ID\",\"rating\":4.0,\"session_id\":\"<script>\"}"
+
 assert_status "Malformed JSON returns 400" \
     "$BASE_URL/log_rating.php" 400 \
     -X POST -H "Content-Type: application/json" \
@@ -227,6 +237,26 @@ assert_status "Valid app_open and install events return 204" \
     "$BASE_URL/log_event.php" 204 \
     -X POST -H "Content-Type: application/json" \
     -d '{"session_id":"smoke-test","events":[{"type":"app_open","data":{"mode":"standalone","source":"load","platform":"ios"}},{"type":"install","data":{"step":"banner_shown","platform":"android"}}]}'
+
+assert_status "Valid favorite_toggle event returns 204" \
+    "$BASE_URL/log_event.php" 204 \
+    -X POST -H "Content-Type: application/json" \
+    -d "{\"session_id\":\"smoke-test\",\"events\":[{\"type\":\"favorite_toggle\",\"data\":{\"beer_id\":\"$FIRST_ID\",\"on\":true}}]}"
+
+assert_status "favorite_toggle with unknown beer_id returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"favorite_toggle","data":{"beer_id":"no-such-beer-xyz","on":true}}]}'
+
+assert_status "Event with a value outside its allowed list returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"sort_change","data":{"value":"evil"}}]}'
+
+assert_status "Event with a missing field returns 400" \
+    "$BASE_URL/log_event.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"panel_toggle","data":{"open":true}}]}'
 
 assert_status "Batch with only unknown event types returns 400" \
     "$BASE_URL/log_event.php" 400 \
@@ -406,11 +436,20 @@ assert_status "Stats JSON with device filter param returns 200" \
 # Per-tab device filters for Usage and Filters & Search
 TAB_STATS="$TMPDIR_TEST/tab_stats.json"
 curl -s -o "$TAB_STATS" -u "$STATS_USER:$STATS_PASS" \
-    "$BASE_URL/stats.php?format=json&usage_device=desktop&filters_device=mobile"
-if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d['usage']['device_filter']=='desktop' and d['filters']['device_filter']=='mobile' else 1)" "$TAB_STATS" 2>/dev/null; then
-    pass "Stats JSON applies usage_device and filters_device independently"
+    "$BASE_URL/stats.php?format=json&usage_device=desktop&filters_device=mobile&fav_device=tablet"
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d['usage']['device_filter']=='desktop' and d['filters']['device_filter']=='mobile' and d['favorites']['device_filter']=='tablet' else 1)" "$TAB_STATS" 2>/dev/null; then
+    pass "Stats JSON applies usage_device, filters_device and fav_device independently"
 else
-    fail "Stats JSON usage_device / filters_device not applied"
+    fail "Stats JSON per-tab device filters not applied"
+fi
+
+FAV_SESSION_STATS="$TMPDIR_TEST/fav_session_stats.json"
+curl -s -o "$FAV_SESSION_STATS" -u "$STATS_USER:$STATS_PASS" \
+    "$BASE_URL/stats.php?format=json&fav_session=%3C!--%3Cscript%3E"
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d['favorites']['session_filter']=='' else 1)" "$FAV_SESSION_STATS" 2>/dev/null; then
+    pass "Stats JSON ignores an unknown fav_session"
+else
+    fail "Stats JSON accepted an unknown fav_session"
 fi
 
 # ══════════════════════════════════════════════════════════════════════
