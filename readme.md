@@ -7,7 +7,7 @@ A Progressive Web App for beer festival management. Users can browse, filter, se
 - **Beer browser** — filter by style, brewery, country, session; sort by name, ABV, rating
 - **Personal ratings** — rate beers 0.25-5.0, stored in localStorage, export/import via shareable URL
 - **Favorites** — star beers to find them quickly
-- **Statistics dashboards** — personal stats (`/my_stats.php`) and organizer stats (`/stats.php`, auth-protected)
+- **Statistics dashboards** — personal stats (`/my_stats.php`) and organizer stats (`/stats.php`, auth-protected) with tabs for consent, usage & PWA installs, filters & search, favorites and ratings
 - **Admin panel** — manage beer catalog via `/admin.php` (auth-protected)
 - **PWA & offline** — installable, Service Worker caches app shell and data
 - **Multi-language** — Danish, English, Swedish, Norwegian, German, French, Polish, Czech - Admin endpoints is only in English
@@ -46,7 +46,7 @@ Environment variables are defined in a `.env` file in the project root (see `.en
 | `FESTIVAL_TITLE_SHORT` | Short name for PWA | `Ølfestival` |
 | `APP_LANGUAGE` | Language code (`da`, `en`, `sv`, `no`, `de`, `fr`, `pl`, `cs`) | `da` |
 | `DOMAIN` | CORS allowed origin | _(none — same-origin only)_ |
-| `ENABLE_STATISTICS_LOGGING` | Enable server-side rating/consent logs | `true` |
+| `ENABLE_STATISTICS_LOGGING` | Enable server-side rating, consent and interaction logs | `true` |
 | `ENABLE_MAINSTYLE_FILTERING` | Group beer styles by main category | `true` |
 | `FESTIVAL_INFO_TEXT` | Custom info text in the app | _(none)_ |
 | `CONTACT_EMAIL` | Email shown in privacy policy | _(none)_ |
@@ -100,6 +100,8 @@ src/                  # Application source (mounted into containers)
   admin_api.php       # Admin REST API
   log_rating.php      # POST API — log a beer rating
   log_cookie_consent.php  # POST API — log consent choice
+  log_event.php       # POST API — log consent-gated interaction events
+  beer_catalog.php    # Shared beer catalog loading and id validation
   health.php          # GET /health — liveness probe (200/503)
   my_stats.php        # Personal statistics page
   privacy-policy.php  # GDPR privacy policy
