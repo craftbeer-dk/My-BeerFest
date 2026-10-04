@@ -1245,12 +1245,12 @@ if (is_readable($styleGroupsFile)) {
                 if (options.indexOf(prev) >= 0) selectElement.value = prev;
             }
 
-            function sendRatingToServer(beerId, beerName, rating, currentSessionId) {
+            function sendRatingToServer(beerId, rating, currentSessionId) {
                 if (!enableStatisticsLogging || statsConsent !== 'true') return;
                 fetch('log_rating.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ beer_id: beerId, beer_name: beerName, rating: rating, session_id: currentSessionId }),
+                    body: JSON.stringify({ beer_id: beerId, rating: rating, session_id: currentSessionId }),
                 }).catch(error => console.error('Error sending rating log:', error));
             }
 
@@ -1390,7 +1390,7 @@ if (is_readable($styleGroupsFile)) {
                                 <div class="untappd-logo"></div>
                                 <span class="global-rating-text"></span>
                             </a>
-                            <select class="rating-select" data-beer-id="${escAttr(beer.id)}" data-beer-name="${escAttr(beer.name)}">
+                            <select class="rating-select" data-beer-id="${escAttr(beer.id)}">
                                 <option value="">${ratingPlaceholder}</option>
                                 ${generateRatingOptions(userRating)}
                             </select>
@@ -1444,13 +1444,13 @@ if (is_readable($styleGroupsFile)) {
             }
 
             function handleRatingChange(event) {
-                const { beerId, beerName } = event.target.dataset;
+                const { beerId } = event.target.dataset;
                 const newRating = parseFloat(event.target.value);
 
                 if (beerId) {
                     if (!isNaN(newRating)) {
                         userRatings[beerId] = newRating;
-                        sendRatingToServer(beerId, beerName, newRating, sessionId);
+                        sendRatingToServer(beerId, newRating, sessionId);
                     } else {
                         delete userRatings[beerId];
                     }
@@ -1476,6 +1476,7 @@ if (is_readable($styleGroupsFile)) {
                     starSvg.classList.add('favorited');
                 }
                 saveState();
+                trackEvent('favorite_toggle', { beer_id: beerId, on: !!userFavorites[beerId] });
                 
                 if (myFavoritesFilter.checked) {
                     renderBeers();

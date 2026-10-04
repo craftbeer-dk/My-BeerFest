@@ -30,28 +30,8 @@ $logFilePath = '/var/log/mybeerfest/ratings.log'; // Path inside the container
 // Get festival title from environment variable (reusing FESTIVAL_TITLE)
 $festivalTitleForLog = getenv('FESTIVAL_TITLE') ?: 'Unknown Festival'; // Reusing FESTIVAL_TITLE for log
 
-// --- Load beers.json for server-side lookup ---
-$beers = [];
-$beersDataPath = '/var/www/html/data/beers.json'; // Path to beers.json inside the container
-if (file_exists($beersDataPath)) {
-    $jsonContent = file_get_contents($beersDataPath);
-    $beers = json_decode($jsonContent, true);
-    if (json_last_error() !== JSON_ERROR_NONE || !is_array($beers)) {
-        error_log("Error: Could not decode beers.json or it's not an array.");
-        $beers = []; // Reset to empty array if invalid
-    }
-} else {
-    error_log("Warning: beers.json not found at $beersDataPath. Beer details will be N/A.");
-}
-
-// Create a lookup map for beers by ID
-$beerLookup = [];
-foreach ($beers as $beer) {
-    if (isset($beer['id'])) {
-        $beerLookup[$beer['id']] = $beer;
-    }
-}
-// --- End Load beers.json ---
+require_once __DIR__ . '/beer_catalog.php';
+$beerLookup = loadBeerCatalog();
 
 
 // Ensure the request method is POST
@@ -72,15 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- Input Validation and Sanitization for incoming client data ---
 
-    // Validate and sanitize beer_id (from client)
+    // Only the beer id is taken from the client; it must exist in beers.json
     $beerId = $data['beer_id'] ?? '';
-    if (!is_string($beerId) || empty($beerId)) {
-        error_log("Validation Error: Missing or invalid beer_id from client.");
+    if (!isValidBeerId($beerId, $beerLookup)) {
+        error_log("Validation Error: Missing, malformed or unknown beer_id from client.");
         http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'Missing or invalid beer ID']);
         exit();
     }
-    $beerId = strip_tags(trim($beerId)); // Sanitize string
 
     // Validate rating (0 = "no rating" / tasted without score)
     $rating = $data['rating'] ?? null;
@@ -92,15 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $rating = (float) $rating; // Ensure it's a float
 
-    // Validate and sanitize session_id
+    // Validate session_id
     $sessionId = $data['session_id'] ?? '';
-    if (!is_string($sessionId) || empty($sessionId)) {
+    if (!isValidSessionId($sessionId)) {
         error_log("Validation Error: Missing or invalid session_id.");
         http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'Missing or invalid session ID']);
         exit();
     }
-    $sessionId = strip_tags(trim($sessionId)); // Sanitize string
 
     // Generate timestamps
     try {

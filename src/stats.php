@@ -11,6 +11,7 @@
  */
 
 session_start();
+require_once __DIR__ . '/beer_catalog.php';
 
 // --- Configuration ---
 $ratingsLogPath = '/var/log/mybeerfest/ratings.log';
@@ -48,7 +49,7 @@ function t($key, $default = '') {
  * @param string $targetSession Optional session filter (e.g., 'Fredag').
  * @return array The calculated statistics object.
  */
-function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = [], $deviceFilter = '', $eventsPath = '', $usageDeviceFilter = '', $filtersDeviceFilter = '') {
+function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = [], $deviceFilter = '', $eventsPath = '', $usageDeviceFilter = '', $filtersDeviceFilter = '', $favSessionFilter = '', $favDeviceFilter = '') {
     $stats = array(
         'visitors' => array(
             'total' => 0,
@@ -69,6 +70,16 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
         ),
         'recent_activity' => array(),
         'top_beers' => array(),
+        'favorites' => array(
+            'total' => 0,
+            'sessions' => 0,
+            'beers' => 0,
+            'filter_sessions' => 0,
+            'top' => array(),
+            'available_sessions' => array(),
+            'session_filter' => $favSessionFilter,
+            'device_filter' => $favDeviceFilter
+        ),
         'available_sessions' => array(),
         'usage' => array(
             'visits' => 0,
@@ -99,19 +110,35 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
     $selections = array();
     $searchTerms = array();
     $zeroResultTerms = array();
+    $favoriteStates = array();
+    $ratingSessionsPerBeer = array();
+    $favoriteFilterSessions = array();
 
     // 0. Process interaction events (visits, installs, filters and search)
     if ($eventsPath !== '' && file_exists($eventsPath)) {
         $hourlyCutoffMs = (time() - 14 * 86400) * 1000;
         $handle = fopen($eventsPath, "r");
         while (($line = fgets($handle)) !== false) {
-            if (!preg_match('/"type":"(app_open|install|filter_change|filter_clear|search)"/', $line)) continue;
+            if (!preg_match('/"type":"(app_open|install|filter_change|filter_clear|search|favorite_toggle)"/', $line)) continue;
             $entry = json_decode($line, true);
             if (!$entry || !isset($entry['type'], $entry['data']) || !is_array($entry['data'])) continue;
             $type = $entry['type'];
             $device = $entry['device_type'] ?? 'unknown';
             $sid = $entry['session_id'] ?? 'anon';
             $data = $entry['data'];
+
+            if ($type === 'filter_change' && ($data['filter'] ?? '') === 'favorites' && ($data['value'] ?? '') === 'on'
+                && ($favDeviceFilter === '' || $device === $favDeviceFilter)) {
+                $favoriteFilterSessions[$sid] = true;
+            }
+
+            if ($type === 'favorite_toggle') {
+                if ($favDeviceFilter !== '' && $device !== $favDeviceFilter) continue;
+                $bid = $data['beer_id'] ?? '';
+                if (!is_string($bid) || $bid === '' || !is_bool($data['on'] ?? null)) continue;
+                $favoriteStates[$bid][$sid] = $data['on'];
+                continue;
+            }
 
             if ($type === 'filter_change' || $type === 'filter_clear' || $type === 'search') {
                 if ($filtersDeviceFilter !== '' && $device !== $filtersDeviceFilter) continue;
@@ -268,6 +295,9 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
 
             $sess = isset($entry['session']) ? $entry['session'] : 'N/A';
             $stats['available_sessions'][$sess] = true;
+            if (isset($entry['beer_id'], $entry['session_id']) && is_scalar($entry['beer_id']) && is_scalar($entry['session_id'])) {
+                $ratingSessionsPerBeer[$entry['beer_id']][$entry['session_id']] = true;
+            }
 
             // Session Filtering
             if ($targetSession !== '' && $sess !== $targetSession) continue;
@@ -355,6 +385,40 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
     $stats['highlights']['most_rated_brewery'] = !empty($brewResults['count']) ? reset($brewResults['count']) : null;
 
     $stats['top_beers'] = array_slice($beerResults['avg'], 0, 10);
+
+    // Favorites: each session's latest star state per beer, for beers still in the catalog
+    $beerLookup = loadBeerCatalog();
+    foreach ($beerLookup as $beer) {
+        if (!empty($beer['session']) && is_string($beer['session'])) $stats['favorites']['available_sessions'][$beer['session']] = true;
+    }
+    $stats['favorites']['available_sessions'] = array_map('strval', array_keys($stats['favorites']['available_sessions']));
+    $favoriteSessions = array();
+    foreach ($favoriteStates as $bid => $sessions) {
+        $beer = $beerLookup[$bid] ?? null;
+        if ($beer === null) continue;
+        if ($favSessionFilter !== '' && ($beer['session'] ?? '') !== $favSessionFilter) continue;
+        $count = 0;
+        foreach ($sessions as $sid => $on) {
+            if (!$on) continue;
+            $count++;
+            $favoriteSessions[$sid] = true;
+        }
+        if ($count === 0) continue;
+        $stats['favorites']['total'] += $count;
+        $stats['favorites']['top'][] = array(
+            'name' => (string) ($beer['name'] ?? $bid),
+            'brewery' => (string) ($beer['brewery'] ?? ''),
+            'favorites' => $count,
+            'ratings' => isset($ratingSessionsPerBeer[$bid]) ? count($ratingSessionsPerBeer[$bid]) : 0
+        );
+    }
+    $stats['favorites']['sessions'] = count($favoriteSessions);
+    $stats['favorites']['beers'] = count($stats['favorites']['top']);
+    $stats['favorites']['filter_sessions'] = count($favoriteFilterSessions);
+    usort($stats['favorites']['top'], function($a, $b) {
+        return ($b['favorites'] <=> $a['favorites']) ?: ($b['ratings'] <=> $a['ratings']);
+    });
+    $stats['favorites']['top'] = array_slice($stats['favorites']['top'], 0, 15);
     $stats['available_sessions'] = array_keys($stats['available_sessions']);
 
     return $stats;
@@ -377,6 +441,14 @@ $filtersDeviceFilter = isset($_GET['filters_device']) ? $_GET['filters_device'] 
 if (!in_array($filtersDeviceFilter, $validDevices, true)) {
     $filtersDeviceFilter = '';
 }
+$favSessionFilter = isset($_GET['fav_session']) && is_string($_GET['fav_session']) ? $_GET['fav_session'] : '';
+if ($favSessionFilter !== '' && !in_array($favSessionFilter, array_column(loadBeerCatalog(), 'session'), true)) {
+    $favSessionFilter = '';
+}
+$favDeviceFilter = isset($_GET['fav_device']) ? $_GET['fav_device'] : '';
+if (!in_array($favDeviceFilter, $validDevices, true)) {
+    $favDeviceFilter = '';
+}
 
 $excludedSessionIds = [];
 if ($excludeRaters) {
@@ -391,14 +463,14 @@ if ($excludeRaters) {
 
 if (isset($_GET['format']) && $_GET['format'] === 'json') {
     header('Content-Type: application/json');
-    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter);
+    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter, $favSessionFilter, $favDeviceFilter);
     $stats['exclude_raters_active'] = $excludeRaters;
     $stats['excluded_count'] = count($excludedSessionIds);
     echo json_encode($stats);
     exit;
 }
 
-$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter);
+$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter, $favSessionFilter, $favDeviceFilter);
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Beerfest');
 ?>
 <!DOCTYPE html>
@@ -506,6 +578,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     <button type="button" class="tab-btn" role="tab" data-tab="consent" onclick="selectTab('consent')">Consent</button>
                     <button type="button" class="tab-btn" role="tab" data-tab="usage" onclick="selectTab('usage')">Usage</button>
                     <button type="button" class="tab-btn" role="tab" data-tab="filters" onclick="selectTab('filters')">Filters &amp; Search</button>
+                    <button type="button" class="tab-btn" role="tab" data-tab="favorites" onclick="selectTab('favorites')">Favorites</button>
                     <button type="button" class="tab-btn" role="tab" data-tab="raters" onclick="selectTab('raters')">Raters</button>
                 </div>
                 <div class="flex items-center gap-4 md:ml-auto flex-wrap">
@@ -769,6 +842,72 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         </div>
         </div>
 
+        <div class="tab-panel" data-tab="favorites">
+        <div class="highlight-section mb-6">
+            <div class="flex flex-col md:flex-row md:items-end gap-4">
+                <div class="w-full md:w-48">
+                    <label for="fav-session-select"><?php echo t('session', 'Session'); ?></label>
+                    <select id="fav-session-select" onchange="refreshData()">
+                        <option value=""><?php echo t('all_sessions', 'All Sessions'); ?></option>
+                        <?php foreach ($initialData['favorites']['available_sessions'] as $s): ?>
+                            <option value="<?php echo htmlspecialchars($s); ?>"<?php echo $favSessionFilter === $s ? ' selected' : ''; ?>><?php echo htmlspecialchars($s); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="w-full md:w-48">
+                    <label for="fav-device-select">Device</label>
+                    <select id="fav-device-select" onchange="refreshData()">
+                        <?php foreach (array('' => 'All Devices', 'mobile' => 'Mobile', 'tablet' => 'Tablet', 'desktop' => 'Desktop', 'unknown' => 'Unknown') as $val => $lbl): ?>
+                            <option value="<?php echo $val; ?>"<?php echo $favDeviceFilter === $val ? ' selected' : ''; ?>><?php echo $lbl; ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ FAVORITES ============ -->
+        <div class="stats-group">
+            <h2 class="section-heading">Favorites <span id="fav-filter-note" class="filter-note"></span></h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div class="stat-card">
+                    <span id="fav-total" class="stat-number">0</span>
+                    <span class="stat-label">Favorites</span>
+                </div>
+                <div class="stat-card">
+                    <span id="fav-sessions" class="stat-number">0</span>
+                    <span class="stat-label">Sessions Using Favorites</span>
+                </div>
+                <div class="stat-card">
+                    <span id="fav-avg" class="stat-number">–</span>
+                    <span class="stat-label">Average per Session</span>
+                </div>
+                <div class="stat-card">
+                    <span id="fav-beers" class="stat-number">0</span>
+                    <span class="stat-label">Beers Favorited</span>
+                </div>
+            </div>
+
+            <div class="highlight-section">
+                <h3 class="highlight-title">Most Favorited</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-white/20">
+                                <th class="py-2">Beer</th>
+                                <th class="py-2">Brewery</th>
+                                <th class="py-2 text-center">Favorites</th>
+                                <th class="py-2 text-right">Ratings</th>
+                            </tr>
+                        </thead>
+                        <tbody id="favorites-table"></tbody>
+                    </table>
+                </div>
+                <div class="data-row" style="margin-top: 0.5rem;"><span>Sessions that used the "Favorites" filter</span><span id="fav-filter-sessions" class="font-bold">0</span></div>
+            </div>
+        </div>
+        </div>
+
         <div class="tab-panel" data-tab="raters">
         <div class="highlight-section mb-6">
             <div class="flex flex-col md:flex-row md:items-end gap-4">
@@ -886,7 +1025,9 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             const device = document.getElementById('device-select').value;
             const usageDevice = document.getElementById('usage-device-select').value;
             const filtersDevice = document.getElementById('filters-device-select').value;
-            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}&device=${encodeURIComponent(device)}&usage_device=${encodeURIComponent(usageDevice)}&filters_device=${encodeURIComponent(filtersDevice)}`;
+            const favSession = document.getElementById('fav-session-select').value;
+            const favDevice = document.getElementById('fav-device-select').value;
+            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}&device=${encodeURIComponent(device)}&usage_device=${encodeURIComponent(usageDevice)}&filters_device=${encodeURIComponent(filtersDevice)}&fav_session=${encodeURIComponent(favSession)}&fav_device=${encodeURIComponent(favDevice)}`;
 
             try {
                 const response = await fetch(url);
@@ -898,7 +1039,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             }
         }
 
-        const TABS = ['consent', 'usage', 'filters', 'raters'];
+        const TABS = ['consent', 'usage', 'filters', 'favorites', 'raters'];
         let lastData = null;
 
         function selectTab(tab) {
@@ -1170,6 +1311,64 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             renderSelections();
         }
 
+        function updateFavorites(fav, labels) {
+            document.getElementById('fav-total').textContent = fav.total;
+            document.getElementById('fav-sessions').textContent = fav.sessions;
+            document.getElementById('fav-avg').textContent = fav.sessions > 0 ? (fav.total / fav.sessions).toFixed(1) : '–';
+            document.getElementById('fav-beers').textContent = fav.beers;
+            document.getElementById('fav-filter-sessions').textContent = fav.filter_sessions;
+
+            const tbody = document.getElementById('favorites-table');
+            tbody.textContent = '';
+            if (fav.top.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 4;
+                td.className = 'py-2 opacity-60';
+                td.textContent = 'No favorites yet';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            }
+            fav.top.forEach(f => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-white/10 hover:bg-white/5';
+                [
+                    ['py-3 font-semibold', f.name],
+                    ['py-3 opacity-70', f.brewery],
+                    ['py-3 text-center font-bold', String(Number(f.favorites))],
+                    ['py-3 text-right', String(Number(f.ratings))]
+                ].forEach(([cls, text]) => {
+                    const td = document.createElement('td');
+                    td.className = cls;
+                    td.textContent = text;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            const sessionSelect = document.getElementById('fav-session-select');
+            const deviceSelect = document.getElementById('fav-device-select');
+            sessionSelect.value = fav.session_filter || '';
+            deviceSelect.value = fav.device_filter || '';
+            const note = document.getElementById('fav-filter-note');
+            note.textContent = '';
+            const parts = [];
+            if (fav.session_filter) parts.push(fav.session_filter);
+            if (fav.device_filter) parts.push((labels[fav.device_filter] || fav.device_filter) + ' only');
+            if (parts.length) {
+                note.append('— ' + parts.join(', ') + ' ');
+                const clear = document.createElement('button');
+                clear.type = 'button';
+                clear.textContent = '(clear)';
+                clear.onclick = () => {
+                    sessionSelect.value = '';
+                    deviceSelect.value = '';
+                    refreshData();
+                };
+                note.append(clear);
+            }
+        }
+
         /**
          * Updates the DOM with calculated metrics.
          */
@@ -1211,6 +1410,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
             updateUsage(data.usage);
             updateFilters(data.filters);
+            updateFavorites(data.favorites, labels);
             const filtersDevice = data.filters.device_filter || '';
             document.getElementById('filters-device-select').value = filtersDevice;
             const filtersNote = document.getElementById('filters-filter-note');
@@ -1346,7 +1546,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
         // Initialize display and set background refresh interval
         selectTab(location.hash.slice(1));
-        updateUI(<?php echo json_encode($initialData); ?>);
+        updateUI(<?php echo json_encode($initialData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>);
         setInterval(() => {
             if (document.getElementById('auto-reload').checked) refreshData();
         }, 30000);

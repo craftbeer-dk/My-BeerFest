@@ -21,14 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit();
 }
 
+// Field types: 'string', 'int' (>= 0), 'bool', 'beer_id' (must exist in beers.json) or a list of
+// allowed values. All fields are required; events with a missing or invalid field are dropped.
 $eventSchemas = [
-    'filter_change' => ['filter' => 'string', 'value' => 'string', 'results' => 'int'],
-    'sort_change'   => ['value' => 'string'],
-    'filter_clear'  => ['cleared' => 'string'],
-    'panel_toggle'  => ['open' => 'bool', 'auto' => 'bool'],
-    'search'        => ['term' => 'string', 'results' => 'int'],
-    'app_open'      => ['mode' => 'string', 'source' => 'string', 'platform' => 'string'],
-    'install'       => ['step' => 'string', 'platform' => 'string'],
+    'filter_change'   => ['filter' => ['session', 'route', 'style', 'brewery', 'country', 'my_rated', 'unrated', 'favorites'], 'value' => 'string', 'results' => 'int'],
+    'sort_change'     => ['value' => ['brewery-asc', 'name-asc', 'alc-asc', 'alc-desc', 'rating-desc', 'my-rating-desc', 'route-order']],
+    'filter_clear'    => ['cleared' => ['filters', 'session']],
+    'panel_toggle'    => ['open' => 'bool', 'auto' => 'bool'],
+    'search'          => ['term' => 'string', 'results' => 'int'],
+    'app_open'        => ['mode' => ['standalone', 'browser'], 'source' => ['load', 'resume'], 'platform' => ['ios', 'android', 'other']],
+    'install'         => ['step' => ['banner_shown', 'banner_dismissed', 'prompt_accepted', 'prompt_declined', 'installed', 'first_launch'], 'platform' => ['ios', 'ios_other_browser', 'android', 'other']],
+    'favorite_toggle' => ['beer_id' => 'beer_id', 'on' => 'bool'],
 ];
 $maxEventsPerBatch = 25;
 $maxStringLength = 100;
@@ -43,34 +46,44 @@ if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
     exit();
 }
 
+require_once __DIR__ . '/beer_catalog.php';
+
 $sessionId = $data['session_id'] ?? '';
 $events = $data['events'] ?? null;
-if (!is_string($sessionId) || trim($sessionId) === '' || !is_array($events) || !array_is_list($events)
+if (!isValidSessionId($sessionId) || !is_array($events) || !array_is_list($events)
     || count($events) === 0 || count($events) > $maxEventsPerBatch) {
     http_response_code(400);
     exit();
 }
-$sessionId = substr(strip_tags(trim($sessionId)), 0, 64);
+$beerCatalog = null;
 
 $validEvents = [];
 foreach ($events as $event) {
-    if (!is_array($event) || !is_string($event['type'] ?? null) || !isset($eventSchemas[$event['type']])) {
+    if (!is_array($event) || !is_string($event['type'] ?? null) || !isset($eventSchemas[$event['type']])
+        || !is_array($event['data'] ?? null)) {
         continue;
     }
-    $input = is_array($event['data'] ?? null) ? $event['data'] : [];
+    $input = $event['data'];
     $clean = [];
     foreach ($eventSchemas[$event['type']] as $field => $kind) {
-        if (!array_key_exists($field, $input)) {
-            continue;
+        $value = $input[$field] ?? null;
+        if (is_array($kind)) {
+            $valid = is_string($value) && in_array($value, $kind, true);
+        } elseif ($kind === 'string') {
+            $valid = is_string($value);
+            if ($valid) $value = mb_substr(strip_tags(trim($value)), 0, $maxStringLength);
+        } elseif ($kind === 'int') {
+            $valid = is_int($value) && $value >= 0;
+        } elseif ($kind === 'bool') {
+            $valid = is_bool($value);
+        } else {
+            $beerCatalog ??= loadBeerCatalog();
+            $valid = isValidBeerId($value, $beerCatalog);
         }
-        $value = $input[$field];
-        if ($kind === 'string' && is_string($value)) {
-            $clean[$field] = mb_substr(strip_tags(trim($value)), 0, $maxStringLength);
-        } elseif ($kind === 'int' && is_int($value) && $value >= 0) {
-            $clean[$field] = $value;
-        } elseif ($kind === 'bool' && is_bool($value)) {
-            $clean[$field] = $value;
+        if (!$valid) {
+            continue 2;
         }
+        $clean[$field] = $value;
     }
     $validEvents[] = ['type' => $event['type'], 'data' => $clean];
 }
