@@ -1213,8 +1213,8 @@ if (is_readable($styleGroupsFile)) {
             function initializeFilters() {
                 const stylesToFilter = enableMainstyleFiltering ? allBeers.map(beer => beer.mainstyle) : allBeers.map(beer => beer.style);
                 populateSelect(styleFilter, sortStylesByConfig([...new Set(stylesToFilter)]));
-                populateSelect(breweryFilter, [...new Set(allBeers.map(beer => beer.brewery))].sort());
-                populateSelect(countryFilter, [...new Set(allBeers.map(beer => beer.country))].sort());
+                populateSelect(breweryFilter, [...new Set(allBeers.map(beer => beer.brewery))].filter(Boolean).sort());
+                populateSelect(countryFilter, [...new Set(allBeers.map(beer => beer.country))].filter(Boolean).sort());
                 populateSelect(sessionFilter, [...new Set(allBeers.map(beer => beer.session))].sort());
                 if (routeFilter) populateRouteOptions();
             }
@@ -1362,59 +1362,64 @@ if (is_readable($styleGroupsFile)) {
                 
                 const fragment = document.createDocumentFragment();
                 beersToRender.forEach(beer => {
-                    const beerCard = document.createElement('div');
-                    beerCard.className = 'beer-card';
-                    const userRating = userRatings[beer.id] !== undefined ? userRatings[beer.id] : '';
-                    const isFavorited = userFavorites[beer.id];
-                    let displayedStyle = beer.style;
-                    if (enableMainstyleFiltering) {
-                        displayedStyle = beer.mainstyle + (beer.substyle ? ` (${beer.substyle})` : '');
-                    }
+                    // One malformed beer must not take down the whole list.
+                    try {
+                        const beerCard = document.createElement('div');
+                        beerCard.className = 'beer-card';
+                        const userRating = userRatings[beer.id] !== undefined ? userRatings[beer.id] : '';
+                        const isFavorited = userFavorites[beer.id];
+                        let displayedStyle = beer.style;
+                        if (enableMainstyleFiltering) {
+                            displayedStyle = beer.mainstyle + (beer.substyle ? ` (${beer.substyle})` : '');
+                        }
                     
-                    const ratingPlaceholder = translations['rate_beer'] ?? 'Rate this beer';
-                    const flagEmoji = countryFlags[beer.country.toLowerCase()] || '';
-                    const untappdUrl = safeUrl(beer.untappd);
-                    const hasUntappd = untappdUrl !== '#';
+                        const ratingPlaceholder = translations['rate_beer'] ?? 'Rate this beer';
+                        const flagEmoji = (beer.country && countryFlags[beer.country.toLowerCase()]) || '';
+                        const untappdUrl = safeUrl(beer.untappd);
+                        const hasUntappd = untappdUrl !== '#';
 
-                    beerCard.innerHTML = `
-                        <svg class="favorite-star ${isFavorited ? 'favorited' : ''}" data-beer-id="${escAttr(beer.id)}" title="Favorite" viewBox="0 0 24 24">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                        </svg>
-                        <h2></h2>
-                        <p class="beer-brewery brewery-text"></p>
-                        <p class="beer-style style-text"></p>
-                        <p class="beer-session session-text"></p>
-                        ${beer.note ? '<p class="beer-note"><span class="note-text"></span></p>' : ''}
-                        <div class="beer-actions-container">
-                            <a href="${hasUntappd ? escAttr(untappdUrl) : '#'}" ${hasUntappd ? 'target="_blank"' : 'data-nolink="1"'} class="untappd-button">
-                                <div class="untappd-logo"></div>
-                                <span class="global-rating-text"></span>
-                            </a>
-                            <select class="rating-select" data-beer-id="${escAttr(beer.id)}">
-                                <option value="">${ratingPlaceholder}</option>
-                                ${generateRatingOptions(userRating)}
-                            </select>
-                        </div>
-                    `;
+                        beerCard.innerHTML = `
+                            <svg class="favorite-star ${isFavorited ? 'favorited' : ''}" data-beer-id="${escAttr(beer.id)}" title="Favorite" viewBox="0 0 24 24">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                            <h2></h2>
+                            <p class="beer-brewery brewery-text"></p>
+                            <p class="beer-style style-text"></p>
+                            <p class="beer-session session-text"></p>
+                            ${beer.note ? '<p class="beer-note"><span class="note-text"></span></p>' : ''}
+                            <div class="beer-actions-container">
+                                <a href="${hasUntappd ? escAttr(untappdUrl) : '#'}" ${hasUntappd ? 'target="_blank"' : 'data-nolink="1"'} class="untappd-button">
+                                    <div class="untappd-logo"></div>
+                                    <span class="global-rating-text"></span>
+                                </a>
+                                <select class="rating-select" data-beer-id="${escAttr(beer.id)}">
+                                    <option value="">${ratingPlaceholder}</option>
+                                    ${generateRatingOptions(userRating)}
+                                </select>
+                            </div>
+                        `;
 
-                    const headingEl = beerCard.querySelector('h2');
-                    headingEl.textContent = beer.name;
-                    if (beer.alc !== null && beer.alc !== undefined) {
-                        const abvEl = document.createElement('span');
-                        abvEl.className = 'beer-abv';
-                        abvEl.textContent = ` – ${beer.alc}%`;
-                        headingEl.appendChild(abvEl);
-                    }
-                    beerCard.querySelector('.brewery-text').textContent = `${beer.brewery} ${flagEmoji}`;
-                    beerCard.querySelector('.style-text').textContent = displayedStyle;
-                    const sessionText = beer.session !== undefined ? beer.session : 'N/A';
-                    const locationText = beer.location ? ` - ${beer.location}` : '';
-                    beerCard.querySelector('.session-text').textContent = sessionText + locationText;
-                    const noteEl = beerCard.querySelector('.note-text');
-                    if (noteEl) noteEl.textContent = beer.note;
-                    beerCard.querySelector('.global-rating-text').textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
+                        const headingEl = beerCard.querySelector('h2');
+                        headingEl.textContent = beer.name;
+                        if (beer.alc !== null && beer.alc !== undefined) {
+                            const abvEl = document.createElement('span');
+                            abvEl.className = 'beer-abv';
+                            abvEl.textContent = ` – ${beer.alc}%`;
+                            headingEl.appendChild(abvEl);
+                        }
+                        beerCard.querySelector('.brewery-text').textContent = `${beer.brewery} ${flagEmoji}`;
+                        beerCard.querySelector('.style-text').textContent = displayedStyle;
+                        const sessionText = beer.session !== undefined ? beer.session : 'N/A';
+                        const locationText = beer.location ? ` - ${beer.location}` : '';
+                        beerCard.querySelector('.session-text').textContent = sessionText + locationText;
+                        const noteEl = beerCard.querySelector('.note-text');
+                        if (noteEl) noteEl.textContent = beer.note;
+                        beerCard.querySelector('.global-rating-text').textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
                     
-                    fragment.appendChild(beerCard);
+                        fragment.appendChild(beerCard);
+                    } catch (e) {
+                        console.error('Could not render beer', beer && beer.id, e);
+                    }
                 });
                 beerListContainer.appendChild(fragment);
 
@@ -1548,6 +1553,14 @@ if (is_readable($styleGroupsFile)) {
             function processBeerData() {
                 validBeerIds = new Set(allBeers.map(beer => beer.id));
                 allBeers.forEach(beer => {
+                    // admin_api.php drops blank optional fields, so a beer may lack
+                    // brewery/country/etc. Normalize to strings so string methods in
+                    // filtering, sorting and rendering never throw.
+                    ['name', 'brewery', 'country'].forEach(field => {
+                        if (typeof beer[field] !== 'string') beer[field] = beer[field] == null ? '' : String(beer[field]);
+                    });
+                    if (beer.rating != null && typeof beer.rating !== 'number') beer.rating = parseFloat(beer.rating);
+                    if (beer.rating != null && !isFinite(beer.rating)) beer.rating = null;
                     if (beer.style && typeof beer.style === 'string') {
                         const parts = beer.style.split(' - ');
                         beer.mainstyle = parts[0].trim();
