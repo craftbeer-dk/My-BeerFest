@@ -174,7 +174,7 @@ function detectSpamRaters(array $rawEntries): array
 }
 
 /**
- * 2. Flat-Liner — 10+ deduplicated ratings and 80%+ are the same value.
+ * 2. Flat-Liner — 10+ scored deduplicated ratings and 80%+ are the same value.
  */
 function detectFlatLiners(array $deduped): array
 {
@@ -182,7 +182,7 @@ function detectFlatLiners(array $deduped): array
 
     foreach ($deduped as $sid => $entries) {
         $ratings = array_column($entries, 'rating');
-        $ratings = array_filter($ratings, fn($r) => $r !== null);
+        $ratings = array_filter($ratings, fn($r) => $r !== null && $r > 0);
         $total   = count($ratings);
         if ($total < 10) continue;
 
@@ -197,7 +197,7 @@ function detectFlatLiners(array $deduped): array
             $hits[$sid] = [
                 'name'     => 'Flat-Liner',
                 'severity' => 'Medium',
-                'detail'   => round($pct * 100) . '% of ' . $total . ' ratings are ' . $modeValue,
+                'detail'   => round($pct * 100) . '% of ' . $total . ' scored ratings are ' . $modeValue,
             ];
         }
     }
