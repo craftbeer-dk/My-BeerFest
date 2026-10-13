@@ -360,7 +360,7 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
                 : 0;
         }
         
-        $byAvg = $list;
+        $byAvg = array_filter($list, function($val) { return count($val['ratings']) > 0; });
         uasort($byAvg, function($a, $b) { 
             return ($b['avg'] <=> $a['avg']) ?: ($b['count'] <=> $a['count']); 
         });
