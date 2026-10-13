@@ -36,9 +36,7 @@ if (!$enableStatisticsLogging) {
     exit;
 }
 
-// Start session to access the session ID.
-session_start();
-$sessionId = $_SESSION['session_id'] ?? 'unknown_session'; // Use a fallback value.
+require_once __DIR__ . '/beer_catalog.php';
 
 // Get festival title from environment variable.
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: 'My BeerFest'; // Default value.
@@ -57,6 +55,13 @@ $data = json_decode($jsonInput, true);
 if (json_last_error() !== JSON_ERROR_NONE || !isset($data['consent']) || !is_bool($data['consent'])) {
     http_response_code(400); // Bad Request
     error_log("Invalid JSON or missing/invalid consent data in log_cookie_consent.php. Length: " . strlen($jsonInput));
+    exit;
+}
+
+$sessionId = $data['session_id'] ?? '';
+if (!isValidSessionId($sessionId)) {
+    http_response_code(400);
+    error_log("Validation Error: Missing or invalid session_id in log_cookie_consent.php.");
     exit;
 }
 
