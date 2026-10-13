@@ -1093,9 +1093,12 @@ if (is_readable($styleGroupsFile)) {
                     }
                     localStorage.setItem('userFavorites', JSON.stringify(sanitizedFavorites));
 
-                    if (allData.consent === 'true' || allData.consent === 'false') {
-                        localStorage.setItem('statsConsent', allData.consent);
-                        if (allData.consent === 'false') clearSessionId();
+                    if (allData.consent === 'false') {
+                        const wasConsented = localStorage.getItem('statsConsent') === 'true';
+                        localStorage.setItem('statsConsent', 'false');
+                        if (wasConsented) logStatsConsentToServer('false');
+                        localStorage.removeItem('standaloneLaunched');
+                        clearSessionId();
                     }
 
                     if (allData.settings) {
@@ -1313,7 +1316,8 @@ if (is_readable($styleGroupsFile)) {
                 if (consent === 'true') {
                     id = getSessionId();
                 } else {
-                    try { id = localStorage.getItem(SESSION_ID_KEY); } catch (e) {}
+                    id = sessionId;
+                    if (!id) { try { id = localStorage.getItem(SESSION_ID_KEY); } catch (e) {} }
                     id = id || newSessionId();
                 }
                 fetch('log_cookie_consent.php', {
