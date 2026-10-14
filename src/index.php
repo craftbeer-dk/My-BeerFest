@@ -2,13 +2,6 @@
 // PHP part: Handles environment variables and loads JSON data.
 ob_start(); // Start output buffering
 
-session_start();
-
-// Generate a unique session ID if not already set.
-if (!isset($_SESSION['session_id'])) {
-    $_SESSION['session_id'] = uniqid('user_', true);
-}
-
 // Set application language from environment variable, default to 'da'.
 $appLanguage = getenv('APP_LANGUAGE') ?: 'da';
 
@@ -134,7 +127,6 @@ if ($notPublic) {
 
 // Prepare PHP data for injection into JavaScript.
 $translationsJson = json_encode($translations);
-$sessionId = $_SESSION['session_id'];
 
 // SSR fallback for #beer-list — visible to non-JS crawlers (Bing, DuckDuckGo,
 // most LLM fetchers). Client JS wipes this container on its first render
@@ -886,6 +878,8 @@ if (is_readable($styleGroupsFile)) {
             let userRatings = {};
             let userFavorites = {};
             let statsConsent = null;
+            const SESSION_ID_KEY = 'statsSessionId';
+            let sessionId = null;
             let countryFlags = {};
             let validBeerIds = new Set();
             let lastFetchTimestamp = 0;
@@ -907,7 +901,6 @@ if (is_readable($styleGroupsFile)) {
 
             // --- Injected PHP Data ---
             const translations = <?php echo $translationsJson; ?>;
-            const sessionId = "<?php echo htmlspecialchars($sessionId); ?>";
             const enableStatisticsLogging = <?php echo json_encode($enableStatisticsLogging); ?>;
             const enableMainstyleFiltering = <?php echo json_encode(true); ?>;
             const routes = <?php echo json_encode($routes); ?>;
@@ -1020,6 +1013,7 @@ if (is_readable($styleGroupsFile)) {
                     localStorage.removeItem('userRatings');
                     localStorage.removeItem('userFavorites');
                     localStorage.removeItem('statsConsent');
+                    localStorage.removeItem(SESSION_ID_KEY);
                     localStorage.removeItem('beerFestivalSettings');
                 }
             }
@@ -1058,10 +1052,7 @@ if (is_readable($styleGroupsFile)) {
                     
                     const currentUrl = window.location.origin + window.location.pathname;
                     let shareableLink = `${currentUrl}?data=${base64String}`;
-                    if (enableStatisticsLogging && statsConsent === 'true') {
-                        shareableLink += `&session_id=${sessionId}`;
-                    }
-                    
+
                     const tempInput = document.createElement('textarea');
                     tempInput.value = shareableLink;
                     document.body.appendChild(tempInput);
@@ -1102,8 +1093,12 @@ if (is_readable($styleGroupsFile)) {
                     }
                     localStorage.setItem('userFavorites', JSON.stringify(sanitizedFavorites));
 
-                    if (allData.consent === 'true' || allData.consent === 'false') {
-                        localStorage.setItem('statsConsent', allData.consent);
+                    if (allData.consent === 'false') {
+                        const wasConsented = localStorage.getItem('statsConsent') === 'true';
+                        localStorage.setItem('statsConsent', 'false');
+                        if (wasConsented) logStatsConsentToServer('false');
+                        localStorage.removeItem('standaloneLaunched');
+                        clearSessionId();
                     }
 
                     if (allData.settings) {
@@ -1245,12 +1240,31 @@ if (is_readable($styleGroupsFile)) {
                 if (options.indexOf(prev) >= 0) selectElement.value = prev;
             }
 
-            function sendRatingToServer(beerId, rating, currentSessionId) {
+            function newSessionId() {
+                return 'user_' + Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            function getSessionId() {
+                if (sessionId) return sessionId;
+                try { sessionId = localStorage.getItem(SESSION_ID_KEY); } catch (e) {}
+                if (!sessionId || !/^[a-zA-Z0-9_.-]{1,64}$/.test(sessionId)) {
+                    sessionId = newSessionId();
+                    try { localStorage.setItem(SESSION_ID_KEY, sessionId); } catch (e) {}
+                }
+                return sessionId;
+            }
+
+            function clearSessionId() {
+                sessionId = null;
+                try { localStorage.removeItem(SESSION_ID_KEY); } catch (e) {}
+            }
+
+            function sendRatingToServer(beerId, rating) {
                 if (!enableStatisticsLogging || statsConsent !== 'true') return;
                 fetch('log_rating.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ beer_id: beerId, rating: rating, session_id: currentSessionId }),
+                    body: JSON.stringify({ beer_id: beerId, rating: rating, session_id: getSessionId() }),
                 }).catch(error => console.error('Error sending rating log:', error));
             }
 
@@ -1282,11 +1296,15 @@ if (is_readable($styleGroupsFile)) {
             function flushEvents() {
                 clearTimeout(eventFlushTimer);
                 eventFlushTimer = null;
+                if (statsConsent !== 'true') {
+                    eventQueue.length = 0;
+                    return;
+                }
                 while (eventQueue.length > 0) {
                     fetch('log_event.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ session_id: sessionId, events: eventQueue.splice(0, 25) }),
+                        body: JSON.stringify({ session_id: getSessionId(), events: eventQueue.splice(0, 25) }),
                         keepalive: true,
                     }).catch(error => console.error('Error sending event log:', error));
                 }
@@ -1294,10 +1312,18 @@ if (is_readable($styleGroupsFile)) {
 
             function logStatsConsentToServer(consent) {
                 if (!enableStatisticsLogging) return;
+                let id;
+                if (consent === 'true') {
+                    id = getSessionId();
+                } else {
+                    id = sessionId;
+                    if (!id) { try { id = localStorage.getItem(SESSION_ID_KEY); } catch (e) {} }
+                    id = id || newSessionId();
+                }
                 fetch('log_cookie_consent.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ consent: consent === 'true' }),
+                    body: JSON.stringify({ consent: consent === 'true', session_id: id }),
                 }).catch(error => console.error('Error sending cookie consent log:', error));
             }
 
@@ -1450,7 +1476,7 @@ if (is_readable($styleGroupsFile)) {
                 if (beerId) {
                     if (!isNaN(newRating)) {
                         userRatings[beerId] = newRating;
-                        sendRatingToServer(beerId, newRating, sessionId);
+                        sendRatingToServer(beerId, newRating);
                     } else {
                         delete userRatings[beerId];
                     }
@@ -1485,19 +1511,23 @@ if (is_readable($styleGroupsFile)) {
 
             function setStatsConsent(consent, fromUserInteraction = false) {
                 const wasConsented = statsConsent === 'true';
+                if (!consent && wasConsented) flushEvents();
                 statsConsent = consent ? 'true' : 'false';
                 if (consent && !wasConsented && fromUserInteraction) {
                     trackAppOpen('load');
                     trackFirstLaunch();
                 }
+                if (fromUserInteraction) {
+                    logStatsConsentToServer(statsConsent);
+                }
                 if (!consent) {
                     try { localStorage.removeItem('standaloneLaunched'); } catch (e) {}
+                    clearSessionId();
                 }
                 
                 if(consentBanner) consentBanner.classList.add('hidden');
 
                 if (fromUserInteraction) {
-                    logStatsConsentToServer(statsConsent);
                     const message = consent ? (translations['stats_accepted_message'] ?? 'Thank you for helping improve the app!') : (translations['stats_declined_message'] ?? 'You have opted out of statistics collection.');
                     showMessage(message, 'success');
                 }

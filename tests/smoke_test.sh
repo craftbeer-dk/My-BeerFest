@@ -202,15 +202,28 @@ assert_no_header "No wildcard CORS on rating endpoint" "$RATING_HDRS" "Access-Co
 # ══════════════════════════════════════════════════════════════════════
 printf "\n\033[1m▸ Cookie consent endpoint (log_cookie_consent.php)\033[0m\n"
 
+# Shares the nginx "logging" rate-limit zone with the rating tests above.
+sleep 12
+
 assert_status "Valid consent POST returns 204" \
     "$BASE_URL/log_cookie_consent.php" 204 \
     -X POST -H "Content-Type: application/json" \
-    -d '{"consent":true}'
+    -d '{"consent":true,"session_id":"smoke-test"}'
 
 assert_status "Invalid consent value returns 400" \
     "$BASE_URL/log_cookie_consent.php" 400 \
     -X POST -H "Content-Type: application/json" \
-    -d '{"consent":"yes"}'
+    -d '{"consent":"yes","session_id":"smoke-test"}'
+
+assert_status "Consent without session_id returns 400" \
+    "$BASE_URL/log_cookie_consent.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"consent":true}'
+
+assert_status "Consent with malformed session_id returns 400" \
+    "$BASE_URL/log_cookie_consent.php" 400 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"consent":true,"session_id":"<script>"}'
 
 assert_status "Malformed JSON returns 400" \
     "$BASE_URL/log_cookie_consent.php" 400 \
@@ -220,7 +233,8 @@ assert_status "Malformed JSON returns 400" \
 CONSENT_HDRS="$TMPDIR_TEST/consent_headers.txt"
 curl -s -D "$CONSENT_HDRS" -o /dev/null -X POST "$BASE_URL/log_cookie_consent.php" \
     -H "Content-Type: application/json" \
-    -d '{"consent":false}'
+    -d '{"consent":false,"session_id":"smoke-test"}'
+assert_header "Consent CORS check reached PHP (204)" "$CONSENT_HDRS" "^HTTP/[0-9.]* 204"
 assert_no_header "No wildcard CORS on consent endpoint" "$CONSENT_HDRS" "Access-Control-Allow-Origin: \*"
 
 # ══════════════════════════════════════════════════════════════════════
@@ -499,6 +513,12 @@ printf "\n\033[1m▸ Other pages\033[0m\n"
 assert_status "my_stats.php returns 200" "$BASE_URL/my_stats.php" 200
 assert_status "privacy-policy.php returns 200" "$BASE_URL/privacy-policy.php" 200
 assert_status "manifest.php returns 200" "$BASE_URL/manifest.php" 200
+
+for page in / /my_stats.php /privacy-policy.php; do
+    PAGE_HDRS="$TMPDIR_TEST/page_headers.txt"
+    curl -s -D "$PAGE_HDRS" -o /dev/null "$BASE_URL$page"
+    assert_no_header "$page sets no cookie" "$PAGE_HDRS" "^Set-Cookie:"
+done
 
 # ══════════════════════════════════════════════════════════════════════
 # SUMMARY

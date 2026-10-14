@@ -2,8 +2,6 @@
 // PHP part: Handles environment variables and loads language strings.
 ob_start();
 
-session_start();
-
 $appLanguage = getenv('APP_LANGUAGE') ?: 'da';
 $langFile = __DIR__ . "/lang/{$appLanguage}.conf";
 $translations = [];

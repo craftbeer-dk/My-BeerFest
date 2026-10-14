@@ -2,8 +2,6 @@
 // Handles language loading and server-side environment setup.
 ob_start();
 
-session_start();
-
 // Set application language from environment variable, default to Danish.
 $appLanguage = getenv('APP_LANGUAGE') ?: 'da';
 $langFile = __DIR__ . "/lang/{$appLanguage}.conf";
