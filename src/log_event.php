@@ -32,6 +32,8 @@ $eventSchemas = [
     'app_open'        => ['mode' => ['standalone', 'browser'], 'source' => ['load', 'resume'], 'platform' => ['ios', 'android', 'other']],
     'install'         => ['step' => ['banner_shown', 'banner_dismissed', 'prompt_accepted', 'prompt_declined', 'installed', 'first_launch'], 'platform' => ['ios', 'ios_other_browser', 'android', 'other']],
     'favorite_toggle' => ['beer_id' => 'beer_id', 'on' => 'bool'],
+    'map_open'        => ['source' => ['button', 'card']],
+    'map_stand_select' => ['stand' => 'string'],
 ];
 $maxEventsPerBatch = 25;
 $maxStringLength = 100;

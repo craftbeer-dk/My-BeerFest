@@ -7,6 +7,7 @@ A Progressive Web App for beer festival management. Users can browse, filter, se
 - **Beer browser** — filter by style, brewery, country, session; sort by name, ABV, rating
 - **Personal ratings** — rate beers 0.25-5.0, stored in localStorage, export/import via shareable URL
 - **Favorites** — star beers to find them quickly
+- **Floor maps** — optional festival map from your own SVG floor plans; beer cards link to their stand, with zoom, pan, a magnifier and favourite markers
 - **Statistics dashboards** — personal stats (`/my_stats.php`) and organizer stats (`/stats.php`, auth-protected) with tabs for consent, usage & PWA installs, filters & search, favorites and ratings
 - **Admin panel** — manage beer catalog via `/admin.php` (auth-protected)
 - **PWA & offline** — installable, Service Worker caches app shell and data
@@ -72,9 +73,80 @@ The beer catalog lives in `src/data/beers.json`. Each beer needs a unique `id`:
   "country": "Denmark",
   "untappd": "https://untappd.com/b/beer/123456",
   "rating": 4.2,
-  "session": "Friday"
+  "session": "Friday",
+  "location": "Main Hall #12"
 }
 ```
+
+`location` is optional: where the beer is served. It is shown on the card and, with a floor map, links to the stand (see [Floor Maps](#floor-maps)).
+
+## Floor Maps
+
+Optional. An interactive map of the festival built from your own SVG floor plans. Without map files the feature is hidden.
+
+**Setting up a map**
+
+1. Make one SVG per hall/floor with each stand marked by a `data-stand` attribute (format below).
+2. Put the files in `src/data/maps/` (mounted into the container with the rest of `src/data/`). No restart is needed: the server picks up changed files right away; visitors with the app cached see them after their next reload (the service worker serves the cached page first).
+3. Give the beers in `beers.json` a `location` that matches a stand, e.g. `"location": "Main Hall #12"`.
+4. Open the app: a **Map** button appears next to the search field, and each beer's location on its card becomes a link to its stand.
+
+**What visitors see**
+
+- The **Map** button opens the map full screen, with a tab per floor.
+- Tapping a beer's location on its card opens the map zoomed to that stand, ringed.
+- Pinch or scroll to zoom (or double-tap), and drag to pan. The magnifier button shows a loupe you can drag around; pinching on the loupe zooms only the loupe.
+- Stands with one of the visitor's favourites get a star (only favourites in the selected session, when a session filter is set).
+- The phone's back button or Escape closes the map.
+
+**SVG format**
+
+Files are shown as tabs in file-name order (prefix with `1-`, `2-`, … to control it).
+
+A floor can have several layouts: SVGs with the same floor name (see `data-location` below) become one tab, and the app shows the layout that draws the floor largest on the current screen. For example `hall.svg` with the legend below for phones and `hall-wide.svg` with the legend beside it for landscape and desktop. It switches when the phone is rotated.
+
+The SVG is shown as authored, legend and styling included, with zoom, pan and an optional magnifier (loupe) for reading small details without zooming. A beer's `location` links its card to a stand: tapping the location opens the map with the stand ringed.
+
+Mark each stand with a `data-stand` attribute, usually on a `<g>` around its dot and number:
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 30" data-location="Main Hall">
+  <!-- walls, tables, labels, legend … -->
+  <g data-stand="12" data-location="Main Hall #12">
+    <circle cx="20" cy="4" r="0.4" fill="#ea733d"/>
+    <text x="20" y="4" font-size="0.44" text-anchor="middle" dy="0.35em">12</text>
+  </g>
+</svg>
+```
+
+| Attribute | Where | Purpose |
+|---|---|---|
+| `data-location` | root `<svg>` | Floor name shown on the tab. Falls back to `<title>`, then the file name (`2-beer-garden.svg` → "Beer garden"). |
+| `data-stand` | stand element | Stand number or label (required). Other elements with the same stand, e.g. a legend entry, can repeat it. |
+| `data-location` | stand element | Full stand location. Defaults to `<floor name> #<stand>`. |
+| `class="page"` or `class="background"` | top-level background rect | Left out when fitting the map to the screen; its fill becomes the colour around the map. |
+| `class="map-overview"` | any element | Shown only when zoomed out, e.g. a "13–18" label per row of stands. |
+| `class="map-detail"` | any element | Shown only when zoomed in far enough to read it (stands drawn about 12 px or larger) and inside the magnifier, e.g. the stand numbers. |
+
+Other viewers ignore the two zoom classes and show everything, so the SVG still works standalone. A plan that is much taller than the screen (e.g. with a legend below it on a phone) opens fitted to the width and can be panned.
+
+A beer's `location` is matched case-insensitively, ignoring `#`:
+
+1. the stand's location (`"Main Hall #12"`, `"main hall 12"`) → that stand is ringed;
+2. a bare stand label (`"12"`) if only one floor has that stand;
+3. a floor name (`"Main Hall"`) → the map opens on that floor;
+4. anything else → shown as plain text without a map link.
+
+**No ready-made SVG?** Any floor plan picture works: create an SVG with the picture as an `<image>` and draw the stand dots on top, e.g. in Inkscape. Reference the picture by path (put it in `custom/`, e.g. `<image href="/custom/plan.png" …/>`) rather than embedding it as base64, since the SVG is inlined into every page load.
+
+Each map is rendered in its own shadow DOM, so its CSS and ids can't clash with the app. The server (`src/map_loader.php`) only removes what could run code or load external resources: scripts, event handlers, animations, `foreignObject`, link targets, `@import` and external URLs (`data:` URIs and same-origin image paths are allowed). Raw files under `/data/maps/` are not served.
+
+**Limits and troubleshooting**
+
+- At most 10 SVG files of up to 2 MB each. The maps are inlined into the main page, so keep them lean (e.g. subset or leave out embedded fonts; the app already loads Inter).
+- A file that isn't valid SVG (malformed XML, no `viewBox` or `width`/`height`, entity declarations) is skipped and logged as `MyBeerFest: skipping invalid map file …` in the PHP container's log (`docker compose logs php`).
+- A beer's location shows as plain text instead of a link when it matches no stand or floor name; check the spelling against the stand's `data-location` (or `<floor name> #<stand>`).
+- A stand number used on several floors (e.g. two halls both with stand 1) can't be matched by number alone; use the full location.
 
 ## Testing
 
@@ -84,7 +156,7 @@ Run the automated smoke tests (requires the app to be running):
 ./tests/smoke_test.sh
 ```
 
-This runs ~58 assertions covering page loads, API validation, auth gates, XSS escaping, and CSRF protection. Override defaults with env vars:
+This runs ~85 assertions covering page loads, API validation, auth gates, XSS escaping, and CSRF protection. Override defaults with env vars:
 
 ```bash
 BASE_URL=http://localhost:8181 ADMIN_USER=admin ADMIN_PASS=changeme ./tests/smoke_test.sh
@@ -102,12 +174,13 @@ src/                  # Application source (mounted into containers)
   log_cookie_consent.php  # POST API — log consent choice
   log_event.php       # POST API — log consent-gated interaction events
   beer_catalog.php    # Shared beer catalog loading and id validation
+  map_loader.php      # Loads and sanitizes optional floor-map SVGs
   health.php          # GET /health — liveness probe (200/503)
   my_stats.php        # Personal statistics page
   privacy-policy.php  # GDPR privacy policy
   manifest.php        # PWA web manifest
   sw.js               # Service Worker
-  data/               # beers.json, flags.json
+  data/               # beers.json, flags.json, optional maps/*.svg
   lang/               # Translation files (.conf)
   config/             # CSS theme files
 nginx/
@@ -115,6 +188,7 @@ nginx/
   entrypoint.sh       # Generates .htpasswd files from env vars
 tests/
   smoke_test.sh       # Automated smoke & security tests
+  map_loader_test.php # Map sanitizer unit tests (run by smoke_test.sh)
 docker-compose.yml
 Dockerfile            # Multi-stage: Node (Tailwind) -> PHP-FPM + Nginx targets
 ```

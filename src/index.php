@@ -186,6 +186,10 @@ if (is_readable($styleGroupsFile)) {
         }
     }
 }
+
+// Optional floor maps (data/maps/*.svg), inlined so they work offline.
+require_once __DIR__ . '/map_loader.php';
+$festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars($appLanguage); ?>">
@@ -650,6 +654,183 @@ if (is_readable($styleGroupsFile)) {
                 padding-right: 1.5rem;
             }
         }
+        .search-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .search-row .search-container {
+            flex: 1;
+            min-width: 0;
+        }
+        .map-open-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 5px;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--input-border-color);
+            border-radius: 0.375rem;
+            background-color: var(--input-background-color);
+            color: var(--input-text-color);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.6;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .map-open-button:hover {
+            background-color: var(--palette-interactive);
+        }
+        .map-open-button svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            flex-shrink: 0;
+        }
+        .map-open-button:focus-visible, .beer-location-link:focus-visible, .map-overlay button:focus-visible {
+            outline: none;
+            border-color: var(--palette-text-primary);
+            box-shadow: 0 0 3px 1px var(--palette-text-primary);
+        }
+        .beer-location-link {
+            display: inline;
+            padding: 0;
+            border: none;
+            border-radius: 0.25rem;
+            background: none;
+            color: inherit;
+            font: inherit;
+            letter-spacing: inherit;
+            text-transform: inherit;
+            text-decoration: underline dotted;
+            text-underline-offset: 0.2em;
+            cursor: pointer;
+        }
+        body.map-is-open {
+            overflow: hidden;
+        }
+        .map-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        .map-overlay[hidden] {
+            display: none;
+        }
+        .map-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem 1rem;
+            padding: max(1rem, env(safe-area-inset-top)) 1rem 1rem;
+        }
+        .map-header .nav-button {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--button-primary-background-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: none;
+        }
+        .map-header .nav-button:hover {
+            background-color: var(--button-primary-hover-bg);
+        }
+        .map-header .nav-button svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-right: 0.5rem;
+        }
+        .map-icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 1px solid var(--input-border-color);
+            border-radius: 0.375rem;
+            background-color: var(--input-background-color);
+            color: var(--input-text-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .map-icon-button:hover {
+            background-color: var(--palette-interactive);
+        }
+        .map-icon-button[aria-pressed="true"] {
+            background-color: var(--palette-text-primary);
+            border-color: var(--palette-text-primary);
+            color: var(--palette-primary);
+        }
+        .map-icon-button svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+        .map-tabs {
+            flex: 1 1 auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 1rem;
+            background-color: var(--section-background-color);
+            border: 1px solid var(--section-border-color);
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .map-tab {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            background-color: var(--card-background-color);
+            border: 1px solid var(--card-border-color);
+            color: var(--card-paragraph-color);
+            transition: background-color 0.2s;
+            cursor: pointer;
+        }
+        .map-tab:hover {
+            background-color: var(--palette-interactive);
+        }
+        .map-tab[aria-selected="true"] {
+            background-color: var(--button-primary-background-color);
+            border-color: transparent;
+            color: white;
+        }
+        .map-viewport {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: var(--palette-interactive);
+        }
+        .map-floor {
+            position: absolute;
+            inset: 0;
+        }
+        .map-floor[hidden] {
+            display: none;
+        }
+        .map-zoom-controls {
+            position: absolute;
+            right: 0.75rem;
+            bottom: max(0.75rem, env(safe-area-inset-bottom));
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .map-zoom-controls .map-icon-button {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -762,6 +943,7 @@ if (is_readable($styleGroupsFile)) {
 
         <!-- Search Section (non-collapsible) -->
         <div class="search-section mb-4">
+            <div class="search-row">
             <div class="search-container">
                 <input type="text" id="search-input" class="w-full search-input pr-12" placeholder="<?php echo htmlspecialchars($translations['search_placeholder'] ?? 'Search by beer name or brewery...'); ?>">
                 <button id="clear-search-btn" class="clear-search-btn hidden" aria-label="Clear search">
@@ -769,6 +951,13 @@ if (is_readable($styleGroupsFile)) {
                         <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
                     </svg>
                 </button>
+            </div>
+<?php if (!empty($festivalMaps)): ?>
+            <button type="button" id="map-open-button" class="map-open-button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+                <span><?php echo htmlspecialchars($translations['map_button'] ?? 'Map'); ?></span>
+            </button>
+<?php endif; ?>
             </div>
         </div>
 
@@ -819,6 +1008,39 @@ if (is_readable($styleGroupsFile)) {
             </p>
         </div>
     </div>
+
+<?php if (!empty($festivalMaps)): ?>
+    <div id="map-overlay" class="map-overlay" role="dialog" aria-modal="true" aria-label="<?php echo htmlspecialchars($translations['map_title'] ?? 'Festival map'); ?>" hidden>
+        <div class="map-header">
+            <button type="button" id="map-close-button" class="nav-button">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                <?php echo htmlspecialchars($translations['back_to_app_link'] ?? 'Back to the app'); ?>
+            </button>
+            <div id="map-tabs" class="map-tabs" role="tablist"></div>
+        </div>
+        <div id="map-viewport" class="map-viewport">
+            <div class="map-zoom-controls">
+                <button type="button" id="map-loupe" class="map-icon-button" aria-pressed="false" aria-label="<?php echo htmlspecialchars($translations['map_loupe'] ?? 'Magnifier'); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="21" y2="21"/></svg>
+                </button>
+                <button type="button" id="map-zoom-in" class="map-icon-button" aria-label="<?php echo htmlspecialchars($translations['map_zoom_in'] ?? 'Zoom in'); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button type="button" id="map-zoom-out" class="map-icon-button" aria-label="<?php echo htmlspecialchars($translations['map_zoom_out'] ?? 'Zoom out'); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button type="button" id="map-zoom-reset" class="map-icon-button" aria-label="<?php echo htmlspecialchars($translations['map_reset'] ?? 'Show the whole map'); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 9 4 4 9 4"/><polyline points="20 9 20 4 15 4"/><polyline points="4 15 4 20 9 20"/><polyline points="20 15 20 20 15 20"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    <template id="map-floors">
+<?php foreach ($festivalMaps as $map): ?>
+        <div class="map-floor" data-floor-name="<?php echo htmlspecialchars($map['name']); ?>"><?php echo $map['svg']; ?></div>
+<?php endforeach; ?>
+    </template>
+<?php endif; ?>
 
     <!-- Message Box for user feedback -->
     <div id="message-box" class="message-box"></div>
@@ -1433,9 +1655,22 @@ if (is_readable($styleGroupsFile)) {
                     }
                     beerCard.querySelector('.brewery-text').textContent = `${beer.brewery} ${flagEmoji}`;
                     beerCard.querySelector('.style-text').textContent = displayedStyle;
-                    const sessionText = beer.session !== undefined ? beer.session : 'N/A';
-                    const locationText = beer.location ? ` - ${beer.location}` : '';
-                    beerCard.querySelector('.session-text').textContent = sessionText + locationText;
+                    const sessionEl = beerCard.querySelector('.session-text');
+                    sessionEl.textContent = beer.session !== undefined ? beer.session : 'N/A';
+                    if (beer.location) {
+                        sessionEl.append(' - ');
+                        if (floorMap && floorMap.resolve(beer.location)) {
+                            const locationButton = document.createElement('button');
+                            locationButton.type = 'button';
+                            locationButton.className = 'beer-location-link';
+                            locationButton.dataset.location = beer.location;
+                            locationButton.setAttribute('aria-label', `${translations['map_show_on_map'] ?? 'Show on map'}: ${beer.location}`);
+                            locationButton.textContent = beer.location;
+                            sessionEl.appendChild(locationButton);
+                        } else {
+                            sessionEl.append(beer.location);
+                        }
+                    }
                     const noteEl = beerCard.querySelector('.note-text');
                     if (noteEl) noteEl.textContent = beer.note;
                     beerCard.querySelector('.global-rating-text').textContent = beer.rating !== null && beer.rating !== undefined ? beer.rating.toFixed(2) : 'N/A';
@@ -1791,6 +2026,661 @@ if (is_readable($styleGroupsFile)) {
                     }
                 });
             }
+
+            // --- Floor map ---
+            // Each SVG is shown as authored inside its own shadow root, so its styles and ids stay
+            // separate from the page. Stands are elements with data-stand (a legend entry may repeat
+            // a stand). Beers link to a stand through their location: the stand's location, a stand
+            // number that only one floor has, or just a floor name. Opening the map from a beer card
+            // rings that stand. Several SVGs with the same floor name are layouts of one floor (e.g.
+            // legend below / legend beside); the one that shows the floor largest on screen is used.
+            function createFloorMap() {
+                const template = document.getElementById('map-floors');
+                if (!template) return null;
+
+                const SVG_NS = 'http://www.w3.org/2000/svg';
+                const overlay = document.getElementById('map-overlay');
+                const viewport = document.getElementById('map-viewport');
+                const tabsEl = document.getElementById('map-tabs');
+                const closeButton = document.getElementById('map-close-button');
+                const loupeButton = document.getElementById('map-loupe');
+                const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                const LOUPE_SIZE = 200;
+                const LOUPE_ZOOM_MIN = 1.25;
+                const LOUPE_ZOOM_MAX = 6;
+                const TOP_GAP = 32;
+                const DETAIL_PX = 12;
+                const normalize = value => String(value || '').toLowerCase().replace(/#/g, ' ').replace(/\s+/g, ' ').trim();
+                const shadowCss = `
+                    :host { display: block; }
+                    svg { display: block; width: 100%; height: 100%; }
+                    .bf-ring { fill: none; stroke: var(--palette-text-primary); stroke-width: 4px; vector-effect: non-scaling-stroke; opacity: 0; pointer-events: none; }
+                    .bf-marker.is-selected .bf-ring { opacity: 1; }
+                    .bf-fav { display: none; fill: var(--icon-favorite-active-color); stroke: var(--palette-primary); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+                    .bf-marker.is-fav .bf-fav { display: inline; }
+                    .bf-loupe { position: absolute; top: 0; left: 0; width: ${LOUPE_SIZE}px; height: ${LOUPE_SIZE}px; border-radius: 50%; overflow: hidden; border: 3px solid var(--palette-text-primary); box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none; display: none; }
+                    .bf-loupe svg { display: block; width: 100%; height: 100%; }
+                    .map-overview, .map-detail { transition: opacity 0.2s; }
+                    svg[data-zoom="far"] .map-detail, svg[data-zoom="near"] .map-overview { opacity: 0; }
+                `;
+
+                const floors = [...template.content.querySelectorAll('.map-floor')].map(el => {
+                    const svg = el.querySelector('svg');
+                    const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+                    return {
+                        name: el.dataset.floorName,
+                        key: normalize(el.dataset.floorName),
+                        el,
+                        svg,
+                        vbW: vb[2] || 1,
+                        vbH: vb[3] || 1,
+                        stands: [],
+                        standByKey: new Map(),
+                        laidOut: false,
+                    };
+                });
+                const groups = [];
+                floors.forEach(floor => {
+                    let group = groups.find(g => g.key === floor.key);
+                    if (!group) groups.push(group = { name: floor.name, key: floor.key, variants: [] });
+                    group.variants.push(floor);
+                    floor.group = group;
+                });
+                const standsByKey = new Map();
+                const standsByLabel = new Map();
+                floors.forEach(floor => {
+                    const floorStands = new Map();
+                    floor.svg.querySelectorAll('[data-stand]').forEach(el => {
+                        const label = el.getAttribute('data-stand').trim();
+                        if (!label) return;
+                        const ownLocation = (el.getAttribute('data-location') || '').trim();
+                        const location = ownLocation || `${floor.name} #${label}`;
+                        const key = normalize(location);
+                        let stand = floorStands.get(key);
+                        if (!stand) {
+                            stand = { floor, label, location, key, primary: null, cx: 0, cy: 0, r: 0, marker: null };
+                            floorStands.set(key, stand);
+                            floor.stands.push(stand);
+                        }
+                        if (!stand.primary || (ownLocation && !stand.primary.hasAttribute('data-location'))) stand.primary = el;
+                    });
+                    floor.stands.forEach(stand => {
+                        floor.standByKey.set(stand.key, stand);
+                        if (!standsByKey.has(stand.key)) standsByKey.set(stand.key, stand);
+                        const labelKey = normalize(stand.label);
+                        if (!standsByLabel.has(labelKey)) standsByLabel.set(labelKey, new Map());
+                        standsByLabel.get(labelKey).set(stand.key, stand);
+                    });
+                });
+                const groupsByNameLength = [...groups].sort((a, b) => b.key.length - a.key.length);
+
+                const resolveCache = new Map();
+                function resolve(location) {
+                    const key = normalize(location);
+                    if (!key) return null;
+                    if (resolveCache.has(key)) return resolveCache.get(key);
+                    let result = null;
+                    const byLabel = standsByLabel.get(key);
+                    if (standsByKey.has(key)) {
+                        const stand = standsByKey.get(key);
+                        result = { floor: stand.floor, stand };
+                    } else if (byLabel && byLabel.size === 1) {
+                        const [stand] = byLabel.values();
+                        result = { floor: stand.floor, stand };
+                    } else {
+                        const group = groupsByNameLength.find(g => key === g.key || key.startsWith(g.key + ' '));
+                        if (group) result = { floor: group.variants[0], stand: null };
+                    }
+                    resolveCache.set(key, result);
+                    return result;
+                }
+
+                let built = false;
+                let active = null;
+                let selectedKey = null;
+                let historyPushed = false;
+                let lastFocus = null;
+                let lastSize = null;
+                let anim = null;
+                let loupeOn = false;
+                let loupePos = null;
+                let loupeDrag = null;
+                let loupePinch = false;
+                let loupeZoom = 2;
+
+                function svgEl(name, attrs) {
+                    const el = document.createElementNS(SVG_NS, name);
+                    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+                    return el;
+                }
+
+                function build() {
+                    if (built) return;
+                    built = true;
+                    floors.forEach(floor => {
+                        document.adoptNode(floor.el);
+                        const root = floor.el.attachShadow({ mode: 'open' });
+                        const style = document.createElement('style');
+                        style.textContent = shadowCss;
+                        root.append(style, floor.svg);
+                        floor.el.hidden = true;
+                        viewport.insertBefore(floor.el, viewport.firstChild);
+                    });
+                    groups.forEach(group => {
+                        const tab = document.createElement('button');
+                        tab.type = 'button';
+                        tab.className = 'map-tab';
+                        tab.setAttribute('role', 'tab');
+                        tab.textContent = group.name;
+                        tab.addEventListener('click', () => showGroup(group));
+                        group.tab = tab;
+                        tabsEl.appendChild(tab);
+                    });
+                }
+
+                function viewportSize() {
+                    return { cw: viewport.clientWidth, ch: viewport.clientHeight };
+                }
+
+                function layout(floor) {
+                    if (floor.laidOut) return;
+                    const svg = floor.svg;
+                    const ctm = svg.getScreenCTM();
+                    if (!ctm || !viewport.clientWidth) return;
+                    const inv = ctm.inverse();
+                    const boxOf = el => {
+                        const r = el.getBoundingClientRect();
+                        if (!r.width && !r.height) return null;
+                        const a = new DOMPoint(r.left, r.top).matrixTransform(inv);
+                        const b = new DOMPoint(r.right, r.bottom).matrixTransform(inv);
+                        return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+                    };
+                    const union = (a, b) => {
+                        if (!a) return b;
+                        const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+                        return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+                    };
+
+                    let content = null;
+                    for (const child of svg.children) {
+                        if (!/^(g|rect|circle|ellipse|line|polyline|polygon|path|text|use|image|svg|switch|a)$/.test(child.localName)) continue;
+                        if (child.matches('.page, .background')) {
+                            const fill = getComputedStyle(child).fill;
+                            if (fill && fill !== 'none' && !fill.startsWith('url')) floor.el.style.backgroundColor = fill;
+                            continue;
+                        }
+                        const box = boxOf(child);
+                        if (box) content = union(content, box);
+                    }
+                    if (!content) {
+                        const vb = svg.viewBox.baseVal;
+                        content = { x: vb.x, y: vb.y, w: vb.width, h: vb.height };
+                    }
+                    const pad = Math.max(content.w, content.h) * 0.01;
+                    floor.fit = { x: content.x - pad, y: content.y - pad, w: content.w + 2 * pad, h: content.h + 2 * pad };
+
+                    floor.stands.forEach(stand => {
+                        const box = boxOf(stand.primary) || { x: 0, y: 0, w: 0, h: 0 };
+                        stand.cx = box.x + box.w / 2;
+                        stand.cy = box.y + box.h / 2;
+                        stand.r = Math.min(box.w, box.h) / 2 || floor.fit.w / 200;
+                    });
+                    const radii = floor.stands.map(s => s.r).sort((a, b) => a - b);
+                    floor.standSize = radii.length ? radii[Math.floor(radii.length / 2)] * 2 : 0;
+
+                    createMarkers(floor);
+                    floor.laidOut = true;
+                    resetView(floor);
+                }
+
+                function starPoints(cx, cy, r) {
+                    const points = [];
+                    for (let i = 0; i < 10; i++) {
+                        const radius = i % 2 === 0 ? r : r * 0.45;
+                        const angle = -Math.PI / 2 + i * Math.PI / 5;
+                        points.push(`${(cx + radius * Math.cos(angle)).toFixed(3)},${(cy + radius * Math.sin(angle)).toFixed(3)}`);
+                    }
+                    return points.join(' ');
+                }
+
+                function createMarkers(floor) {
+                    const layer = svgEl('g', { class: 'bf-markers' });
+                    floor.stands.forEach(stand => {
+                        const marker = svgEl('g', { class: 'bf-marker' });
+                        const ringR = stand.r * 1.45;
+                        const offset = ringR * 0.8;
+                        marker.appendChild(svgEl('circle', { class: 'bf-ring', cx: stand.cx, cy: stand.cy, r: ringR }));
+                        marker.appendChild(svgEl('polygon', { class: 'bf-fav', points: starPoints(stand.cx + offset, stand.cy - offset, stand.r * 0.6) }));
+                        stand.marker = marker;
+                        layer.appendChild(marker);
+                    });
+                    floor.svg.appendChild(layer);
+                }
+
+                // View widths at which a typical stand is drawn about 64px (max zoom) or 26px (focus) wide.
+                function minViewWidth(floor) {
+                    return floor.standSize ? viewportSize().cw * floor.standSize / 64 : floor.fit.w / 8;
+                }
+
+                function focusViewWidth(floor) {
+                    return floor.standSize ? viewportSize().cw * floor.standSize / 26 : floor.fit.w / 3;
+                }
+
+                function clampWidth(floor, w) {
+                    const { cw, ch } = viewportSize();
+                    const maxW = Math.max(floor.fit.w, floor.fit.h * cw / ch);
+                    return Math.min(Math.max(w, Math.min(minViewWidth(floor), maxW)), maxW);
+                }
+
+                function clampView(floor, v) {
+                    const { cw, ch } = viewportSize();
+                    const fit = floor.fit;
+                    const w = clampWidth(floor, v.w);
+                    const h = w * ch / cw;
+                    // Content smaller than the view is centred horizontally and kept near the top.
+                    const clampAxis = (center, size, start, length, overflowCenter) => size >= length
+                        ? overflowCenter
+                        : Math.min(Math.max(center, start + size / 2), start + length - size / 2);
+                    const gap = Math.min(TOP_GAP * h / ch, h - fit.h);
+                    const cx = clampAxis(v.x + v.w / 2, w, fit.x, fit.w, fit.x + fit.w / 2);
+                    const cy = clampAxis(v.y + v.h / 2, h, fit.y, fit.h, fit.y - gap + h / 2);
+                    return { x: cx - w / 2, y: cy - h / 2, w, h };
+                }
+
+                // Optional zoom-dependent content: .map-overview shows when zoomed out, .map-detail when
+                // stands are drawn at least DETAIL_PX wide.
+                function setZoomLevel(svg, floor, pxPerUnit) {
+                    if (floor.standSize) svg.setAttribute('data-zoom', floor.standSize * pxPerUnit >= DETAIL_PX ? 'near' : 'far');
+                }
+
+                function applyView(floor) {
+                    const v = floor.view;
+                    floor.svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+                    setZoomLevel(floor.svg, floor, viewportSize().cw / v.w);
+                    lastSize = viewportSize();
+                    updateLoupe();
+                }
+
+                function setView(floor, v) {
+                    floor.view = clampView(floor, v);
+                    applyView(floor);
+                }
+
+                function cancelAnimation() {
+                    if (anim) cancelAnimationFrame(anim);
+                    anim = null;
+                }
+
+                function animateTo(floor, target, duration = 300) {
+                    cancelAnimation();
+                    const to = clampView(floor, target);
+                    if (reduceMotion || !floor.view) {
+                        floor.view = to;
+                        applyView(floor);
+                        return;
+                    }
+                    const from = { ...floor.view };
+                    const start = performance.now();
+                    const step = now => {
+                        const t = Math.min(1, (now - start) / duration);
+                        const e = 1 - Math.pow(1 - t, 3);
+                        floor.view = {
+                            x: from.x + (to.x - from.x) * e,
+                            y: from.y + (to.y - from.y) * e,
+                            w: from.w + (to.w - from.w) * e,
+                            h: from.h + (to.h - from.h) * e,
+                        };
+                        applyView(floor);
+                        anim = t < 1 ? requestAnimationFrame(step) : null;
+                    };
+                    anim = requestAnimationFrame(step);
+                }
+
+                // Start with the whole floor on screen, or, when that would shrink it a lot (a tall plan
+                // with its legend on a phone), fill the width and let the rest be panned to.
+                function resetView(floor, animate = false) {
+                    const { cw, ch } = viewportSize();
+                    const fit = floor.fit;
+                    const whole = Math.max(fit.w, fit.h * cw / ch);
+                    const w = whole > fit.w * 1.25 ? fit.w : whole;
+                    const h = w * ch / cw;
+                    const target = { x: fit.x + fit.w / 2 - w / 2, y: fit.y - Math.max(0, Math.min(TOP_GAP * h / ch, h - fit.h)), w, h };
+                    if (animate) animateTo(floor, target);
+                    else setView(floor, target);
+                }
+
+                function zoomTarget(floor, factor, px, py) {
+                    const v = floor.view;
+                    const { cw, ch } = viewportSize();
+                    const ax = v.x + px / cw * v.w;
+                    const ay = v.y + py / ch * v.h;
+                    const w = clampWidth(floor, v.w / factor);
+                    const h = w * ch / cw;
+                    return { x: ax - px / cw * w, y: ay - py / ch * h, w, h };
+                }
+
+                function centerOn(stand, w) {
+                    const { cw, ch } = viewportSize();
+                    const h = w * ch / cw;
+                    return { x: stand.cx - w / 2, y: stand.cy - h / 2, w, h };
+                }
+
+                function focusStand(stand) {
+                    animateTo(stand.floor, centerOn(stand, Math.min(stand.floor.view.w, focusViewWidth(stand.floor))), 450);
+                }
+
+
+                function showFloor(floor) {
+                    active = floor;
+                    floors.forEach(f => {
+                        f.el.hidden = f !== floor;
+                    });
+                    groups.forEach(g => {
+                        g.tab.setAttribute('aria-selected', g === floor.group ? 'true' : 'false');
+                    });
+                    layout(floor);
+                    refresh();
+                    floor.group.tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                }
+
+                // The layout of a floor that draws it largest in the current viewport.
+                function bestVariant(group) {
+                    const { cw, ch } = viewportSize();
+                    if (group.variants.length < 2 || !cw || !ch) return group.variants[0];
+                    return group.variants.reduce((best, f) =>
+                        Math.min(cw / f.vbW, ch / f.vbH) > Math.min(cw / best.vbW, ch / best.vbH) ? f : best);
+                }
+
+                function showGroup(group) {
+                    showFloor(bestVariant(group));
+                }
+
+                function selectedStand() {
+                    return selectedKey && active ? active.standByKey.get(selectedKey) || null : null;
+                }
+
+                function refresh() {
+                    if (!built) return;
+                    const session = sessionFilter.value;
+                    const favKeys = new Set();
+                    allBeers.forEach(beer => {
+                        if (!userFavorites[beer.id] || !beer.location || (session && beer.session !== session)) return;
+                        const target = resolve(beer.location);
+                        if (target && target.stand) favKeys.add(target.stand.key);
+                    });
+                    floors.forEach(floor => floor.stands.forEach(stand => {
+                        if (!stand.marker) return;
+                        stand.marker.classList.toggle('is-fav', favKeys.has(stand.key));
+                        stand.marker.classList.toggle('is-selected', stand.key === selectedKey);
+                    }));
+                    hideLoupe();
+                    updateLoupe();
+                }
+
+                function ringStand(key) {
+                    selectedKey = key;
+                    refresh();
+                    const stand = selectedStand();
+                    if (!stand) return;
+                    focusStand(stand);
+                    trackEvent('map_stand_select', { stand: stand.location.slice(0, 100) });
+                }
+
+                function open({ location = null, source = 'button' } = {}) {
+                    build();
+                    const wasOpen = !overlay.hidden;
+                    overlay.hidden = false;
+                    document.body.classList.add('map-is-open');
+                    if (!wasOpen) {
+                        lastFocus = document.activeElement;
+                        try {
+                            history.pushState({ beerfestMap: true }, '');
+                            historyPushed = true;
+                        } catch (e) {}
+                        trackEvent('map_open', { source });
+                    }
+                    const target = location ? resolve(location) : null;
+                    showGroup(target ? target.floor.group : (active || floors[0]).group);
+                    if (target && target.stand) {
+                        ringStand(target.stand.key);
+                    } else {
+                        selectedKey = null;
+                        if (target) resetView(active);
+                        refresh();
+                    }
+                    if (!wasOpen) closeButton.focus({ preventScroll: true });
+                }
+
+                // While on, the loupe stays visible and shows a magnified copy of the floor under it.
+                function loupeSize() {
+                    const { cw, ch } = viewportSize();
+                    return Math.max(80, Math.min(LOUPE_SIZE, cw - 16, ch - 16));
+                }
+
+                // The loupe may hang over the edges, but its centre stays on screen so it can be grabbed.
+                function clampLoupe(pos) {
+                    const { cw, ch } = viewportSize();
+                    return { x: Math.min(Math.max(pos.x, 0), cw), y: Math.min(Math.max(pos.y, 0), ch) };
+                }
+
+                function updateLoupe() {
+                    const floor = active;
+                    if (!loupeOn || !floor || !floor.view || overlay.hidden) return;
+                    if (!floor.loupe) {
+                        floor.loupe = document.createElement('div');
+                        floor.loupe.className = 'bf-loupe';
+                        floor.el.shadowRoot.appendChild(floor.loupe);
+                    }
+                    if (!floor.loupe.firstChild) {
+                        floor.loupe.appendChild(floor.svg.cloneNode(true));
+                        floor.loupe.style.backgroundColor = floor.el.style.backgroundColor || getComputedStyle(viewport).backgroundColor;
+                    }
+                    const { cw } = viewportSize();
+                    const size = loupeSize();
+                    loupePos = clampLoupe(loupePos || { x: cw / 2, y: viewportSize().ch / 2 });
+                    const v = floor.view;
+                    const unitsPerPx = v.w / cw;
+                    const span = size / loupeZoom * unitsPerPx;
+                    const x = v.x + loupePos.x * unitsPerPx;
+                    const y = v.y + loupePos.y * unitsPerPx;
+                    floor.loupe.firstChild.setAttribute('viewBox', `${x - span / 2} ${y - span / 2} ${span} ${span}`);
+                    floor.loupe.firstChild.setAttribute('data-zoom', 'near');
+                    floor.loupe.style.width = floor.loupe.style.height = `${size}px`;
+                    floor.loupe.style.transform = `translate(${loupePos.x - size / 2}px, ${loupePos.y - size / 2}px)`;
+                    floor.loupe.style.display = 'block';
+                }
+
+                function nearLoupe(point) {
+                    return loupeOn && loupePos && Math.hypot(point.x - loupePos.x, point.y - loupePos.y) <= loupeSize() / 2 + 24;
+                }
+
+                function zoomLoupe(factor) {
+                    loupeZoom = Math.min(Math.max(loupeZoom * factor, LOUPE_ZOOM_MIN), LOUPE_ZOOM_MAX);
+                    updateLoupe();
+                }
+
+                function hideLoupe() {
+                    floors.forEach(floor => {
+                        if (!floor.loupe) return;
+                        floor.loupe.style.display = 'none';
+                        floor.loupe.textContent = '';
+                    });
+                }
+
+                function setLoupe(on) {
+                    loupeOn = on;
+                    loupeDrag = null;
+                    loupeButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+                    hideLoupe();
+                    updateLoupe();
+                }
+
+                function close(fromPopstate = false) {
+                    if (overlay.hidden) return;
+                    overlay.hidden = true;
+                    hideLoupe();
+                    document.body.classList.remove('map-is-open');
+                    cancelAnimation();
+                    pointers.clear();
+                    if (historyPushed && !fromPopstate) history.back();
+                    historyPushed = false;
+                    if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+                }
+
+                // Pan with one pointer (or drag the loupe when touching near it), pinch with two (on the
+                // loupe it zooms only the loupe), double-tap to zoom in.
+                const pointers = new Map();
+                let tap = null;
+                let lastTap = null;
+                const localPoint = e => {
+                    const rect = viewport.getBoundingClientRect();
+                    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                };
+
+                viewport.addEventListener('pointerdown', e => {
+                    if (!active || !active.view || e.target.closest('.map-zoom-controls')) return;
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    cancelAnimation();
+                    viewport.setPointerCapture(e.pointerId);
+                    const point = localPoint(e);
+                    pointers.set(e.pointerId, point);
+                    const wasDraggingLoupe = !!loupeDrag;
+                    loupeDrag = null;
+                    loupePinch = false;
+                    if (pointers.size === 1 && nearLoupe(point)) {
+                        loupeDrag = { id: e.pointerId, dx: point.x - loupePos.x, dy: point.y - loupePos.y };
+                    } else if (pointers.size === 2) {
+                        const [a, b] = [...pointers.values()];
+                        loupePinch = wasDraggingLoupe || nearLoupe({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+                    }
+                    tap = pointers.size === 1 && !loupeDrag ? { id: e.pointerId, start: point, time: performance.now(), moved: 0 } : null;
+                });
+
+                viewport.addEventListener('pointermove', e => {
+                    if (!pointers.has(e.pointerId) || !active || !active.view) return;
+                    const prev = pointers.get(e.pointerId);
+                    const point = localPoint(e);
+                    const { cw } = viewportSize();
+                    if (loupeDrag && loupeDrag.id === e.pointerId) {
+                        loupePos = { x: point.x - loupeDrag.dx, y: point.y - loupeDrag.dy };
+                        updateLoupe();
+                    } else if (pointers.size === 1) {
+                        const scale = active.view.w / cw;
+                        setView(active, { ...active.view, x: active.view.x - (point.x - prev.x) * scale, y: active.view.y - (point.y - prev.y) * scale });
+                    } else if (pointers.size === 2 && loupePinch) {
+                        const [otherId] = [...pointers.keys()].filter(id => id !== e.pointerId);
+                        const other = pointers.get(otherId);
+                        const prevDist = Math.hypot(prev.x - other.x, prev.y - other.y) || 1;
+                        zoomLoupe((Math.hypot(point.x - other.x, point.y - other.y) || 1) / prevDist);
+                    } else if (pointers.size === 2) {
+                        const [otherId] = [...pointers.keys()].filter(id => id !== e.pointerId);
+                        const other = pointers.get(otherId);
+                        const prevMid = { x: (prev.x + other.x) / 2, y: (prev.y + other.y) / 2 };
+                        const mid = { x: (point.x + other.x) / 2, y: (point.y + other.y) / 2 };
+                        const prevDist = Math.hypot(prev.x - other.x, prev.y - other.y) || 1;
+                        const dist = Math.hypot(point.x - other.x, point.y - other.y) || 1;
+                        const scale = active.view.w / cw;
+                        setView(active, { ...active.view, x: active.view.x - (mid.x - prevMid.x) * scale, y: active.view.y - (mid.y - prevMid.y) * scale });
+                        setView(active, zoomTarget(active, dist / prevDist, mid.x, mid.y));
+                    }
+                    pointers.set(e.pointerId, point);
+                    if (tap && tap.id === e.pointerId) {
+                        tap.moved = Math.max(tap.moved, Math.hypot(point.x - tap.start.x, point.y - tap.start.y));
+                    }
+                });
+
+                const endPointer = e => {
+                    if (!pointers.has(e.pointerId)) return;
+                    pointers.delete(e.pointerId);
+                    if (loupeDrag && loupeDrag.id === e.pointerId) loupeDrag = null;
+                    if (pointers.size < 2) loupePinch = false;
+                    if (e.type !== 'pointerup' || !tap || tap.id !== e.pointerId) return;
+                    const now = performance.now();
+                    if (tap.moved < 10 && now - tap.time < 500) {
+                        const point = tap.start;
+                        if (lastTap && now - lastTap.time < 300 && Math.hypot(point.x - lastTap.x, point.y - lastTap.y) < 30) {
+                            animateTo(active, zoomTarget(active, 2, point.x, point.y), 250);
+                            lastTap = null;
+                        } else {
+                            lastTap = { time: now, x: point.x, y: point.y };
+                        }
+                    }
+                    tap = null;
+                };
+                viewport.addEventListener('pointerup', endPointer);
+                viewport.addEventListener('pointercancel', endPointer);
+
+                viewport.addEventListener('wheel', e => {
+                    if (!active || !active.view) return;
+                    e.preventDefault();
+                    cancelAnimation();
+                    const point = localPoint(e);
+                    const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.002));
+                    if (nearLoupe(point)) zoomLoupe(factor);
+                    else setView(active, zoomTarget(active, factor, point.x, point.y));
+                }, { passive: false });
+
+                const zoomButton = factor => () => {
+                    if (!active || !active.view) return;
+                    const { cw, ch } = viewportSize();
+                    animateTo(active, zoomTarget(active, factor, cw / 2, ch / 2), 250);
+                };
+                loupeButton.addEventListener('click', () => setLoupe(!loupeOn));
+                document.getElementById('map-zoom-in').addEventListener('click', zoomButton(1.6));
+                document.getElementById('map-zoom-out').addEventListener('click', zoomButton(1 / 1.6));
+                document.getElementById('map-zoom-reset').addEventListener('click', () => {
+                    if (active && active.laidOut) resetView(active, true);
+                });
+
+                new ResizeObserver(() => {
+                    if (overlay.hidden || !active) return;
+                    const size = viewportSize();
+                    if (!size.cw || !size.ch) return;
+                    const best = bestVariant(active.group);
+                    if (best !== active) {
+                        showFloor(best);
+                        resetView(best);
+                        const stand = selectedStand();
+                        if (stand) setView(best, centerOn(stand, Math.min(best.view.w, focusViewWidth(best))));
+                        return;
+                    }
+                    if (!active.laidOut) {
+                        layout(active);
+                        refresh();
+                        return;
+                    }
+                    if (!lastSize || !lastSize.cw) return resetView(active);
+                    const v = active.view;
+                    const scale = v.w / lastSize.cw;
+                    const cx = v.x + v.w / 2, cy = v.y + v.h / 2;
+                    const w = scale * size.cw, h = scale * size.ch;
+                    setView(active, { x: cx - w / 2, y: cy - h / 2, w, h });
+                }).observe(viewport);
+
+                document.getElementById('map-open-button').addEventListener('click', () => open({ source: 'button' }));
+                closeButton.addEventListener('click', () => close());
+                document.addEventListener('click', event => {
+                    const link = event.target.closest('.beer-location-link');
+                    if (link) open({ location: link.dataset.location, source: 'card' });
+                });
+                document.addEventListener('keydown', e => {
+                    if (e.key === 'Escape' && !overlay.hidden) close();
+                });
+                window.addEventListener('popstate', () => close(true));
+
+                // Warm the service worker cache for raster backgrounds so the map works offline.
+                const imageUrls = floors.flatMap(floor => [...floor.svg.querySelectorAll('image')]
+                    .map(img => img.getAttribute('href') || img.getAttributeNS('http://www.w3.org/1999/xlink', 'href'))
+                    .filter(href => href && !href.startsWith('data:')));
+                setTimeout(() => {
+                    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+                    imageUrls.forEach(href => fetch(href).catch(() => {}));
+                }, 5000);
+
+                return { resolve, open };
+            }
+
+            const floorMap = createFloorMap();
 
             // --- Start Application ---
             let listenersInitialized = false;
