@@ -257,6 +257,11 @@ assert_status "Valid favorite_toggle event returns 204" \
     -X POST -H "Content-Type: application/json" \
     -d "{\"session_id\":\"smoke-test\",\"events\":[{\"type\":\"favorite_toggle\",\"data\":{\"beer_id\":\"$FIRST_ID\",\"on\":true}}]}"
 
+assert_status "Valid map_open and map_stand_select events return 204" \
+    "$BASE_URL/log_event.php" 204 \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"session_id":"smoke-test","events":[{"type":"map_open","data":{"source":"card"}},{"type":"map_stand_select","data":{"stand":"Hall #1"}}]}'
+
 assert_status "favorite_toggle with unknown beer_id returns 400" \
     "$BASE_URL/log_event.php" 400 \
     -X POST -H "Content-Type: application/json" \
@@ -504,6 +509,29 @@ assert_status "Routes save rejects malformed beer id" \
     -u "$ADMIN_USER:$ADMIN_PASS" \
     -X POST -H "Content-Type: application/json" -H "X-Requested-With: XMLHttpRequest" \
     -d '[{"name":"Smoke test route","beers":["not a valid id!"]}]'
+
+# ══════════════════════════════════════════════════════════════════════
+# 9b. FLOOR MAPS
+# ══════════════════════════════════════════════════════════════════════
+printf "\n\033[1m▸ Floor maps\033[0m\n"
+
+assert_status "Raw map SVGs under /data/maps/ are not served" "$BASE_URL/data/maps/any.svg" 404
+if grep -q 'id="map-floors"' "$MAIN_FILE"; then
+    if grep -q '<script' <(sed -n '/<template id="map-floors">/,/<\/template>/p' "$MAIN_FILE"); then
+        fail "Inlined maps contain no script elements"
+    else
+        pass "Inlined maps contain no script elements"
+    fi
+fi
+if command -v docker >/dev/null 2>&1 && docker compose ps --status running php >/dev/null 2>&1 \
+    && docker compose exec -T php test -f /var/www/html/map_loader.php 2>/dev/null; then
+    if docker compose exec -T php php < "$(dirname "$0")/map_loader_test.php" > "$TMPDIR_TEST/map_test.txt" 2>&1; then
+        pass "Map sanitizer unit tests (tests/map_loader_test.php)"
+    else
+        fail "Map sanitizer unit tests (tests/map_loader_test.php)"
+        grep FAIL "$TMPDIR_TEST/map_test.txt" || true
+    fi
+fi
 
 # ══════════════════════════════════════════════════════════════════════
 # 10. STATIC PAGES

@@ -4,6 +4,7 @@ src/data/beers-*.json
 src/data/excluded_raters.json
 src/data/routes.json
 src/data/routes-*.json
+src/data/maps/
 src/dist/
 node_modules/
 custom/
