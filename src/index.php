@@ -1210,7 +1210,7 @@ if (is_readable($styleGroupsFile)) {
                 populateSelect(styleFilter, sortStylesByConfig([...new Set(stylesToFilter)]));
                 populateSelect(breweryFilter, [...new Set(allBeers.map(beer => beer.brewery))].sort());
                 populateSelect(countryFilter, [...new Set(allBeers.map(beer => beer.country))].sort());
-                populateSelect(sessionFilter, [...new Set(allBeers.map(beer => beer.session))].sort());
+                populateSelect(sessionFilter, [...new Set(allBeers.map(beer => beer.session))]);
                 if (routeFilter) populateRouteOptions();
             }
 
