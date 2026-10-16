@@ -966,7 +966,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             <article class="beer-card">
                 <h2><?= htmlspecialchars($beer['name'] ?? '') ?></h2>
 <?php if (!empty($beer['brewery'])): ?>
-                <p><?= htmlspecialchars($beer['brewery'] . (!empty($beer['served_by']) ? ' @ ' . $beer['served_by'] : '')) ?></p>
+                <p><?= htmlspecialchars($beer['brewery'] . (!empty($beer['served_by']) ? ' · ' . $beer['served_by'] : '')) ?></p>
 <?php endif; ?>
 <?php
                 $meta = [];
@@ -1655,7 +1655,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                         abvEl.textContent = ` – ${beer.alc}%`;
                         headingEl.appendChild(abvEl);
                     }
-                    const breweryText = beer.served_by ? `${beer.brewery} @ ${beer.served_by}` : beer.brewery;
+                    const breweryText = beer.served_by ? `${beer.brewery} · ${beer.served_by}` : beer.brewery;
                     beerCard.querySelector('.brewery-text').textContent = `${breweryText} ${flagEmoji}`;
                     beerCard.querySelector('.style-text').textContent = displayedStyle;
                     const sessionEl = beerCard.querySelector('.session-text');

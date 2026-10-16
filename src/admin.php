@@ -2082,9 +2082,9 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             return JSON.stringify(currentRoutes) !== JSON.stringify(originalRoutes);
         }
 
-        // "The Bruery @ Frederiks" when a bar or importer serves another brewery's beer.
+        // "The Bruery · Frederiks" when a bar or importer serves another brewery's beer.
         function breweryLabel(b) {
-            return (b.brewery || '') + (b.served_by ? ' @ ' + b.served_by : '');
+            return (b.brewery || '') + (b.served_by ? ' · ' + b.served_by : '');
         }
 
         // "Name - Brewery - Session" (parts omitted when empty).

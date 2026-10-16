@@ -80,7 +80,7 @@ The beer catalog lives in `src/data/beers.json`. Each beer needs a unique `id`:
 
 `location` is optional: where the beer is served. It is shown on the card and, with a floor map, links to the stand (see [Floor Maps](#floor-maps)).
 
-`served_by` is optional: the bar or importer pouring another brewery's beer. Keep `brewery` as the real producer (it drives the Untappd lookup, country and stats) and set `served_by` to the stand, e.g. `"brewery": "The Bruery", "served_by": "Frederiks"`. The card shows "The Bruery @ Frederiks"; the brewery filter lists both, and choosing Frederiks shows everything Frederiks serves. Sorting by brewery keeps a pourer's beers together.
+`served_by` is optional: the bar or importer pouring another brewery's beer. Keep `brewery` as the real producer (it drives the Untappd lookup, country and stats) and set `served_by` to the stand, e.g. `"brewery": "The Bruery", "served_by": "Frederiks"`. The card shows "The Bruery · Frederiks"; the brewery filter lists both, and choosing Frederiks shows everything Frederiks serves. Sorting by brewery keeps a pourer's beers together.
 
 ## Floor Maps
 
