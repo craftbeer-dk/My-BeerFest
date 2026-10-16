@@ -966,7 +966,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             <article class="beer-card">
                 <h2><?= htmlspecialchars($beer['name'] ?? '') ?></h2>
 <?php if (!empty($beer['brewery'])): ?>
-                <p><?= htmlspecialchars($beer['brewery']) ?></p>
+                <p><?= htmlspecialchars($beer['brewery'] . (!empty($beer['served_by']) ? ' · ' . $beer['served_by'] : '')) ?></p>
 <?php endif; ?>
 <?php
                 $meta = [];
@@ -1430,7 +1430,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             function initializeFilters() {
                 const stylesToFilter = enableMainstyleFiltering ? allBeers.map(beer => beer.mainstyle) : allBeers.map(beer => beer.style);
                 populateSelect(styleFilter, sortStylesByConfig([...new Set(stylesToFilter)]));
-                populateSelect(breweryFilter, [...new Set(allBeers.map(beer => beer.brewery))].sort());
+                populateSelect(breweryFilter, [...new Set(allBeers.flatMap(beer => [beer.brewery, beer.served_by]).filter(Boolean))].sort());
                 populateSelect(countryFilter, [...new Set(allBeers.map(beer => beer.country))].sort());
                 populateSelect(sessionFilter, [...new Set(allBeers.map(beer => beer.session))]);
                 if (routeFilter) populateRouteOptions();
@@ -1559,13 +1559,15 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                 const searchTerm = searchInput.value.trim().replace(/\s+/g, ' ').toLowerCase();
                 
                 if (searchTerm) {
-                    filteredBeers = filteredBeers.filter(beer => beer.name.toLowerCase().includes(searchTerm) || beer.brewery.toLowerCase().includes(searchTerm));
+                    filteredBeers = filteredBeers.filter(beer => beer.name.toLowerCase().includes(searchTerm) || beer.brewery.toLowerCase().includes(searchTerm)
+                        || (beer.served_by || '').toLowerCase().includes(searchTerm));
                 }
                 if (styleFilter.value) {
                     const styleProp = enableMainstyleFiltering ? 'mainstyle' : 'style';
                     filteredBeers = filteredBeers.filter(beer => beer[styleProp] === styleFilter.value);
                 }
-                if (breweryFilter.value) filteredBeers = filteredBeers.filter(beer => beer.brewery === breweryFilter.value);
+                // A pourer (served_by, e.g. a bar or importer) lists everything it serves.
+                if (breweryFilter.value) filteredBeers = filteredBeers.filter(beer => beer.brewery === breweryFilter.value || beer.served_by === breweryFilter.value);
                 if (countryFilter.value) filteredBeers = filteredBeers.filter(beer => beer.country === countryFilter.value);
                 if (sessionFilter.value) filteredBeers = filteredBeers.filter(beer => beer.session === sessionFilter.value);
                 if (currentRoute) filteredBeers = filteredBeers.filter(beer => routePos.has(beer.id));
@@ -1580,7 +1582,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                     const myRatingB = userRatings[b.id] || 0;
                     switch (sortOption) {
                         case 'name-asc': return a.name.localeCompare(b.name);
-                        case 'brewery-asc': return a.brewery.localeCompare(b.brewery);
+                        case 'brewery-asc': return (a.served_by || a.brewery).localeCompare(b.served_by || b.brewery) || a.brewery.localeCompare(b.brewery);
                         case 'alc-asc': return (a.alc || 0) - (b.alc || 0);
                         case 'alc-desc': return (b.alc || 0) - (a.alc || 0);
                         case 'rating-desc': return (b.rating || 0) - (a.rating || 0);
@@ -1653,7 +1655,8 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                         abvEl.textContent = ` – ${beer.alc}%`;
                         headingEl.appendChild(abvEl);
                     }
-                    beerCard.querySelector('.brewery-text').textContent = `${beer.brewery} ${flagEmoji}`;
+                    const breweryText = beer.served_by ? `${beer.brewery} · ${beer.served_by}` : beer.brewery;
+                    beerCard.querySelector('.brewery-text').textContent = `${breweryText} ${flagEmoji}`;
                     beerCard.querySelector('.style-text').textContent = displayedStyle;
                     const sessionEl = beerCard.querySelector('.session-text');
                     sessionEl.textContent = beer.session !== undefined ? beer.session : 'N/A';
