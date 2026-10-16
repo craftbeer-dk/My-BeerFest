@@ -100,6 +100,7 @@ function getBeerFieldRules() {
         'id'       => ['type' => 'string', 'required' => true,  'max_length' => 100, 'pattern' => '/^[a-zA-Z0-9_-]+$/'],
         'name'     => ['type' => 'string', 'required' => true,  'max_length' => 200],
         'brewery'  => ['type' => 'string', 'required' => false, 'max_length' => 200],
+        'served_by' => ['type' => 'string', 'required' => false, 'max_length' => 200],
         'style'    => ['type' => 'string', 'required' => false, 'max_length' => 200],
         'country'  => ['type' => 'string', 'required' => false, 'max_length' => 100],
         'session'  => ['type' => 'string', 'required' => false, 'max_length' => 100],

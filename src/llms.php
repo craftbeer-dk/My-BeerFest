@@ -23,7 +23,7 @@ echo "Progressive Web App for browsing, filtering, and rating beers at the festi
 echo "Ratings are stored locally in the visitor's browser — no accounts, no server-side personal data.\n\n";
 
 echo "## Beer catalog\n\n";
-echo "- [Beer catalog (JSON)](/data/beers.json): Machine-readable list of every beer with brewery, style, ABV, country, session, and Untappd link. Primary structured data source.\n";
+echo "- [Beer catalog (JSON)](/data/beers.json): Machine-readable list of every beer with brewery (and who serves it, for bars and importers), style, ABV, country, session, location and Untappd link. Primary structured data source.\n";
 echo "- [Country flag map (JSON)](/data/flags.json): Country → emoji flag lookup used by the UI.\n\n";
 
 echo "## Pages\n\n";

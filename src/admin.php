@@ -906,6 +906,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         var FIELDS = [
             { key: 'name', label: 'Name', type: 'text', required: true },
             { key: 'brewery', label: 'Brewery', type: 'text', required: true },
+            { key: 'served_by', label: 'Served by', type: 'text' },
             { key: 'style', label: 'Style', type: 'text' },
             { key: 'alc', label: 'ABV %', type: 'number', step: '0.1' },
             { key: 'rating', label: 'Rating', type: 'number', step: '0.01' },
@@ -960,7 +961,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                     '<button class="btn-small btn-secondary" onclick="window._admin.deleteBeer(\'' + esc(beer.id) + '\')">Del</button>' +
                 '</div></td>' +
                 '<td title="' + esc(beer.name || '') + '">' + esc(beer.name || '') + '</td>' +
-                '<td title="' + esc(beer.brewery || '') + '">' + esc(beer.brewery || '') + '</td>' +
+                '<td title="' + esc(breweryLabel(beer)) + '">' + esc(breweryLabel(beer)) + '</td>' +
                 '<td title="' + esc(beer.style || '') + '">' + esc(beer.style || '') + '</td>' +
                 '<td>' + esc(beer.alc != null ? beer.alc : '') + '</td>' +
                 '<td>' + esc(beer.rating != null ? beer.rating : '') + '</td>' +
@@ -979,6 +980,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             return currentBeers.filter(function(b) {
                 return (b.name && b.name.toLowerCase().indexOf(term) >= 0) ||
                        (b.brewery && b.brewery.toLowerCase().indexOf(term) >= 0) ||
+                       (b.served_by && b.served_by.toLowerCase().indexOf(term) >= 0) ||
                        (b.style && b.style.toLowerCase().indexOf(term) >= 0) ||
                        (b.id && b.id.toLowerCase().indexOf(term) >= 0) ||
                        (b.country && b.country.toLowerCase().indexOf(term) >= 0) ||
@@ -1366,7 +1368,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 for (var a = 0; a < diff.added.length; a++) {
                     var beer = diff.added[a];
                     html += '<div class="diff-item"><div class="diff-beer-name">' + esc(beer.name || beer.id) + '</div>' +
-                        '<div class="diff-field">' + esc(beer.brewery || '') + ' &middot; ' + esc(beer.style || '') + '</div></div>';
+                        '<div class="diff-field">' + esc(breweryLabel(beer)) + ' &middot; ' + esc(beer.style || '') + '</div></div>';
                 }
                 html += '</div>';
             }
@@ -1377,7 +1379,7 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 for (var r = 0; r < diff.removed.length; r++) {
                     var rbeer = diff.removed[r];
                     html += '<div class="diff-item"><div class="diff-beer-name">' + esc(rbeer.name || rbeer.id) + '</div>' +
-                        '<div class="diff-field">' + esc(rbeer.brewery || '') + ' &middot; ' + esc(rbeer.style || '') + '</div></div>';
+                        '<div class="diff-field">' + esc(breweryLabel(rbeer)) + ' &middot; ' + esc(rbeer.style || '') + '</div></div>';
                 }
                 html += '</div>';
             }
@@ -2080,10 +2082,15 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             return JSON.stringify(currentRoutes) !== JSON.stringify(originalRoutes);
         }
 
+        // "The Bruery @ Frederiks" when a bar or importer serves another brewery's beer.
+        function breweryLabel(b) {
+            return (b.brewery || '') + (b.served_by ? ' @ ' + b.served_by : '');
+        }
+
         // "Name - Brewery - Session" (parts omitted when empty).
         function beerLabelFor(b) {
             var parts = [b.name || b.id];
-            if (b.brewery) parts.push(b.brewery);
+            if (b.brewery) parts.push(breweryLabel(b));
             if (b.session) parts.push(b.session);
             return parts.join(' - ');
         }
