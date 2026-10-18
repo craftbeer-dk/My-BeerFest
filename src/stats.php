@@ -42,6 +42,56 @@ function t($key, $default = '') {
 // --- Data Processing Logic ---
 
 /**
+ * Groups visits into the viewer's local hours (a single day), days (up to 31 days) or weeks
+ * (Monday-based), covering the whole window or, for all time, the first to the last visit.
+ * Each bucket has browser and installed-app visits and its unique visitors.
+ */
+function usageBuckets($opens, $window, $tz) {
+    $local = function ($ms) use ($tz) { return (new DateTimeImmutable('@' . intdiv($ms, 1000)))->setTimezone($tz); };
+    $times = array_column($opens, 0);
+    if ($window !== null) {
+        $first = $local($window[0]);
+        $last = $local($window[1] - 1);
+    } elseif ($times) {
+        $first = $local(min($times));
+        $last = $local(max($times));
+    } else {
+        $first = $last = $local(time() * 1000);
+    }
+    $firstDay = $first->setTime(0, 0);
+    $lastDay = $last->setTime(0, 0);
+    $days = $firstDay->diff($lastDay)->days + 1;
+    $bucket = $days <= 1 ? 'hour' : ($days <= 31 ? 'day' : 'week');
+    $monday = function ($d) { return $d->setISODate((int) $d->format('o'), (int) $d->format('W'))->setTime(0, 0); };
+    $keyOf = function ($d) use ($bucket, $monday) {
+        if ($bucket === 'hour') return $d->format('Y-m-d\TH');
+        return ($bucket === 'week' ? $monday($d) : $d)->format('Y-m-d');
+    };
+
+    $buckets = array();
+    if ($bucket === 'hour') {
+        for ($h = 0; $h < 24; $h++) $buckets[$firstDay->format('Y-m-d') . 'T' . sprintf('%02d', $h)] = array(0, 0, array());
+    } else {
+        $step = new DateInterval($bucket === 'week' ? 'P7D' : 'P1D');
+        $end = $bucket === 'week' ? $monday($lastDay) : $lastDay;
+        for ($d = $bucket === 'week' ? $monday($firstDay) : $firstDay; $d <= $end; $d = $d->add($step)) {
+            $buckets[$d->format('Y-m-d')] = array(0, 0, array());
+        }
+    }
+    foreach ($opens as $open) {
+        $key = $keyOf($local($open[0]));
+        if (!isset($buckets[$key])) continue;
+        $buckets[$key][$open[1] ? 1 : 0]++;
+        $buckets[$key][2][$open[2]] = true;
+    }
+    $out = array();
+    foreach ($buckets as $key => $b) {
+        $out[] = array('key' => $key, 'browser' => $b[0], 'standalone' => $b[1], 'unique' => count($b[2]));
+    }
+    return array($bucket, $out);
+}
+
+/**
  * Aggregates statistics from log files with strict deduplication and grouping.
  *
  * @param string $ratingsPath Path to the ratings log.
@@ -49,7 +99,7 @@ function t($key, $default = '') {
  * @param string $targetSession Optional session filter (e.g., 'Fredag').
  * @return array The calculated statistics object.
  */
-function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = [], $deviceFilter = '', $eventsPath = '', $usageDeviceFilter = '', $filtersDeviceFilter = '', $favSessionFilter = '', $favDeviceFilter = '') {
+function calculateStats($ratingsPath, $consentPath, $targetSession = '', $excludedSessionIds = [], $deviceFilter = '', $eventsPath = '', $usageDeviceFilter = '', $filtersDeviceFilter = '', $favSessionFilter = '', $favDeviceFilter = '', $usageWindow = null, $usageTz = null) {
     $stats = array(
         'visitors' => array(
             'total' => 0,
@@ -74,6 +124,7 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
             'total' => 0,
             'sessions' => 0,
             'beers' => 0,
+            'median_per_session' => 0,
             'filter_sessions' => 0,
             'top' => array(),
             'available_sessions' => array(),
@@ -83,13 +134,15 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
         'available_sessions' => array(),
         'usage' => array(
             'visits' => 0,
+            'unique_visitors' => 0,
             'browser' => 0,
             'standalone' => 0,
-            'returns' => 0,
             'installs' => 0,
             'installs_by_platform' => array('ios' => 0, 'android' => 0, 'other' => 0),
             'funnel' => array('banner_shown' => 0, 'banner_dismissed' => 0, 'prompt_accepted' => 0, 'prompt_declined' => 0, 'installed' => 0),
-            'hourly' => array(),
+            'bucket' => 'day',
+            'buckets' => array(),
+            'active_days' => array(),
             'device_filter' => $usageDeviceFilter
         ),
         'filters' => array(
@@ -97,11 +150,9 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
             'sessions' => 0,
             'clears' => 0,
             'searches' => 0,
-            'zero_result_searches' => 0,
             'usage' => array(),
             'selections' => array(),
             'top_searches' => array(),
-            'zero_result_terms' => array(),
             'device_filter' => $filtersDeviceFilter
         )
     );
@@ -109,14 +160,15 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
     $filterUsage = array();
     $selections = array();
     $searchTerms = array();
-    $zeroResultTerms = array();
     $favoriteStates = array();
     $ratingSessionsPerBeer = array();
     $favoriteFilterSessions = array();
 
     // 0. Process interaction events (visits, installs, filters and search)
+    $usageOpens = array();
+    $activeQuarters = array();
     if ($eventsPath !== '' && file_exists($eventsPath)) {
-        $hourlyCutoffMs = (time() - 14 * 86400) * 1000;
+        $usageVisitors = array();
         $handle = fopen($eventsPath, "r");
         while (($line = fgets($handle)) !== false) {
             if (!preg_match('/"type":"(app_open|install|filter_change|filter_clear|search|favorite_toggle)"/', $line)) continue;
@@ -150,10 +202,6 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
                     $stats['filters']['searches']++;
                     $searchTerms[$term]['sessions'][$sid] = true;
                     $searchTerms[$term]['results'] = $data['results'] ?? null;
-                    if (($data['results'] ?? null) === 0) {
-                        $stats['filters']['zero_result_searches']++;
-                        $zeroResultTerms[$term][$sid] = true;
-                    }
                 } else {
                     $filter = $data['filter'] ?? '';
                     $value = $data['value'] ?? '';
@@ -163,7 +211,7 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
                     if (!isset($filterUsage[$filter])) $filterUsage[$filter] = array('times' => 0, 'sessions' => array());
                     $filterUsage[$filter]['times']++;
                     $filterUsage[$filter]['sessions'][$sid] = true;
-                    if (in_array($filter, array('style', 'brewery', 'country', 'route'), true)) {
+                    if (in_array($filter, array('session', 'style', 'brewery', 'country', 'route'), true)) {
                         $selections[$filter][$value] = ($selections[$filter][$value] ?? 0) + 1;
                     }
                 }
@@ -172,18 +220,19 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
 
             if ($usageDeviceFilter !== '' && $device !== $usageDeviceFilter) continue;
 
+            // Usage is limited to the selected time window [from, to) in ms; the days with any
+            // visit are listed regardless, so the page can offer them to choose from.
+            $ms = $entry['timestamp_unix_ms'] ?? null;
+            $hasTime = is_numeric($ms);
+            if ($type === 'app_open' && $hasTime) $activeQuarters[intdiv((int) $ms, 900000)] = true;
+            if ($usageWindow !== null && (!$hasTime || $ms < $usageWindow[0] || $ms >= $usageWindow[1])) continue;
+
             if ($type === 'app_open') {
                 $mode = ($data['mode'] ?? '') === 'standalone' ? 'standalone' : 'browser';
                 $stats['usage']['visits']++;
+                $usageVisitors[$sid] = true;
                 $stats['usage'][$mode]++;
-                if (($data['source'] ?? '') === 'resume') $stats['usage']['returns']++;
-
-                $ms = $entry['timestamp_unix_ms'] ?? 0;
-                if (is_numeric($ms) && $ms >= $hourlyCutoffMs) {
-                    $hour = (string) (intdiv((int) $ms, 3600000) * 3600000);
-                    if (!isset($stats['usage']['hourly'][$hour])) $stats['usage']['hourly'][$hour] = array(0, 0);
-                    $stats['usage']['hourly'][$hour][$mode === 'standalone' ? 1 : 0]++;
-                }
+                if ($hasTime) $usageOpens[] = array((int) $ms, $mode === 'standalone', $sid);
             } else {
                 $step = $data['step'] ?? '';
                 if ($step === 'first_launch') {
@@ -197,8 +246,15 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
             }
         }
         fclose($handle);
+        $stats['usage']['unique_visitors'] = count($usageVisitors);
     }
-    $stats['usage']['hourly'] = (object) $stats['usage']['hourly'];
+    $usageTz = $usageTz ?: new DateTimeZone(date_default_timezone_get());
+    list($stats['usage']['bucket'], $stats['usage']['buckets']) = usageBuckets($usageOpens, $usageWindow, $usageTz);
+    foreach (array_keys($activeQuarters) as $quarter) {
+        $day = (new DateTimeImmutable('@' . ($quarter * 900)))->setTimezone($usageTz)->format('Y-m-d');
+        $stats['usage']['active_days'][$day] = true;
+    }
+    $stats['usage']['active_days'] = array_keys($stats['usage']['active_days']);
 
     $stats['filters']['sessions'] = count($filterSessions);
     foreach ($filterUsage as $filter => $use) {
@@ -218,11 +274,6 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
     }
     usort($stats['filters']['top_searches'], function($a, $b) { return $b['sessions'] <=> $a['sessions']; });
     $stats['filters']['top_searches'] = array_slice($stats['filters']['top_searches'], 0, 15);
-    foreach ($zeroResultTerms as $term => $sessions) {
-        $stats['filters']['zero_result_terms'][] = array('term' => (string) $term, 'sessions' => count($sessions));
-    }
-    usort($stats['filters']['zero_result_terms'], function($a, $b) { return $b['sessions'] <=> $a['sessions']; });
-    $stats['filters']['zero_result_terms'] = array_slice($stats['filters']['zero_result_terms'], 0, 15);
 
     // 1. Process Visitor Logs (Deduplicate by session_id)
     $visitorConsents = array();
@@ -263,6 +314,8 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
         if ($c) $stats['visitors']['yes']++;
         else $stats['visitors']['no']++;
     }
+    // All devices, for the "Simulate 100% consent" factor (independent of the Consent tab's filter)
+    $stats['consent_all'] = array('total' => count($visitorConsents), 'yes' => count(array_filter($visitorConsents)));
 
     try {
         $cursor = new DateTime('now', new DateTimeZone('UTC'));
@@ -401,7 +454,7 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
         foreach ($sessions as $sid => $on) {
             if (!$on) continue;
             $count++;
-            $favoriteSessions[$sid] = true;
+            $favoriteSessions[$sid] = ($favoriteSessions[$sid] ?? 0) + 1;
         }
         if ($count === 0) continue;
         $stats['favorites']['total'] += $count;
@@ -413,6 +466,12 @@ function calculateStats($ratingsPath, $consentPath, $targetSession = '', $exclud
         );
     }
     $stats['favorites']['sessions'] = count($favoriteSessions);
+    if ($favoriteSessions) {
+        $perSession = array_values($favoriteSessions);
+        sort($perSession);
+        $mid = intdiv(count($perSession), 2);
+        $stats['favorites']['median_per_session'] = count($perSession) % 2 ? $perSession[$mid] : ($perSession[$mid - 1] + $perSession[$mid]) / 2;
+    }
     $stats['favorites']['beers'] = count($stats['favorites']['top']);
     $stats['favorites']['filter_sessions'] = count($favoriteFilterSessions);
     usort($stats['favorites']['top'], function($a, $b) {
@@ -445,6 +504,16 @@ $favSessionFilter = isset($_GET['fav_session']) && is_string($_GET['fav_session'
 if ($favSessionFilter !== '' && !in_array($favSessionFilter, array_column(loadBeerCatalog(), 'session'), true)) {
     $favSessionFilter = '';
 }
+$usageWindow = null;
+if (isset($_GET['usage_from'], $_GET['usage_to']) && is_string($_GET['usage_from']) && is_string($_GET['usage_to'])
+    && ctype_digit($_GET['usage_from']) && ctype_digit($_GET['usage_to']) && strlen($_GET['usage_from']) <= 15 && strlen($_GET['usage_to']) <= 15
+    && (int) $_GET['usage_from'] < (int) $_GET['usage_to'] && (int) $_GET['usage_to'] - (int) $_GET['usage_from'] <= 400 * 86400000) {
+    $usageWindow = array((int) $_GET['usage_from'], (int) $_GET['usage_to']);
+}
+$usageTz = null;
+if (isset($_GET['usage_tz']) && is_string($_GET['usage_tz']) && in_array($_GET['usage_tz'], DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true)) {
+    $usageTz = new DateTimeZone($_GET['usage_tz']);
+}
 $favDeviceFilter = isset($_GET['fav_device']) ? $_GET['fav_device'] : '';
 if (!in_array($favDeviceFilter, $validDevices, true)) {
     $favDeviceFilter = '';
@@ -463,14 +532,14 @@ if ($excludeRaters) {
 
 if (isset($_GET['format']) && $_GET['format'] === 'json') {
     header('Content-Type: application/json');
-    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter, $favSessionFilter, $favDeviceFilter);
+    $stats = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter, $favSessionFilter, $favDeviceFilter, $usageWindow, $usageTz);
     $stats['exclude_raters_active'] = $excludeRaters;
     $stats['excluded_count'] = count($excludedSessionIds);
     echo json_encode($stats);
     exit;
 }
 
-$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter, $favSessionFilter, $favDeviceFilter);
+$initialData = calculateStats($ratingsLogPath, $consentLogPath, $filterSession, $excludedSessionIds, $deviceFilter, $eventsLogPath, $usageDeviceFilter, $filtersDeviceFilter, $favSessionFilter, $favDeviceFilter, $usageWindow, $usageTz);
 $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Beerfest');
 ?>
 <!DOCTYPE html>
@@ -555,6 +624,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         .tab-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .tab-btn { padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 600; background-color: var(--card-background-color); border: 1px solid var(--card-border-color); color: var(--card-paragraph-color); transition: background-color 0.2s; cursor: pointer; }
         .tab-btn:hover { background-color: var(--palette-interactive); }
+        body.simulating .scaled::before { content: '≈ '; }
         .tab-btn.active { background-color: var(--button-primary-background-color); border-color: transparent; color: white; }
         .filter-note { font-size: 0.875rem; font-weight: 400; color: var(--card-paragraph-color); }
         .filter-note button { color: var(--palette-link); cursor: pointer; margin-left: 0.25rem; }
@@ -582,6 +652,10 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     <button type="button" class="tab-btn" role="tab" data-tab="raters" onclick="selectTab('raters')">Raters</button>
                 </div>
                 <div class="flex items-center gap-4 md:ml-auto flex-wrap">
+                    <label for="simulate-consent" class="inline-flex items-center gap-2 cursor-pointer text-sm" style="margin: 0;">
+                        <input type="checkbox" id="simulate-consent" class="w-4 h-4 rounded border-gray-300" onchange="toggleSimulation()">
+                        <span>Simulate 100% consent</span>
+                    </label>
                     <label for="auto-reload" class="inline-flex items-center gap-2 cursor-pointer text-sm" style="margin: 0;">
                         <input type="checkbox" id="auto-reload" checked class="w-4 h-4 rounded border-gray-300">
                         <span>Auto-refresh (30s)</span>
@@ -591,6 +665,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     </button>
                 </div>
             </div>
+            <p id="simulate-note" class="text-xs mt-3 hidden" style="color: var(--card-paragraph-color);"></p>
         </div>
 
         <div class="tab-panel" data-tab="consent">
@@ -668,6 +743,12 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="w-full md:w-48">
+                    <label for="usage-window-select">Time window</label>
+                    <select id="usage-window-select" onchange="refreshData()">
+                        <option value="all">All time</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -677,9 +758,8 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div class="stat-card">
-                    <span id="u-visits" class="stat-number">0</span>
-                    <span class="stat-label">Visits</span>
-                    <span id="u-returns" class="stat-label block mt-1" style="text-transform: none; font-weight: 400;"></span>
+                    <span id="u-visits" class="stat-number scaled">0</span>
+                    <span class="stat-label">Visits / Unique Visitors</span>
                 </div>
                 <div class="stat-card">
                     <span id="u-browser" class="stat-number">–</span>
@@ -690,7 +770,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     <span class="stat-label">In Installed App</span>
                 </div>
                 <div class="stat-card">
-                    <span id="u-installs" class="stat-number">0</span>
+                    <span id="u-installs" class="stat-number scaled">0</span>
                     <span class="stat-label">Installs</span>
                 </div>
             </div>
@@ -698,31 +778,31 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="highlight-section" style="margin-bottom: 0; display: flex; flex-direction: column;">
                     <div class="highlight-title flex items-center justify-between gap-4">
-                        <h3>Activity by Hour</h3>
-                        <select id="usage-day-select" onchange="renderUsageChart()" style="width: auto; height: 30px; padding: 0 0.5rem; font-size: 0.875rem; font-weight: 400;"></select>
+                        <h3 id="usage-chart-title">Activity by Day</h3>
                     </div>
                     <div class="flex gap-4 text-xs mb-2" style="color: var(--card-paragraph-color);">
                         <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background: var(--palette-text-primary);"></span>Browser</span>
                         <span><span id="usage-installed-swatch" class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background: var(--palette-link);"></span>Installed app</span>
+                        <span><span class="inline-block h-3 rounded-sm align-middle mr-1" style="width: 0.375rem; background: var(--card-paragraph-color);"></span>Unique visitors</span>
                     </div>
                     <div id="usage-chart" class="overflow-x-auto" style="flex: 1; min-height: 220px;"></div>
                 </div>
 
                 <div class="highlight-section" style="margin-bottom: 0;">
                     <h3 class="highlight-title">Installs</h3>
-                    <div class="data-row"><span>iOS</span><span id="u-inst-ios" class="font-bold">0</span></div>
-                    <div class="data-row"><span>Android</span><span id="u-inst-android" class="font-bold">0</span></div>
-                    <div class="data-row"><span>Other (Mac, Windows, …)</span><span id="u-inst-other" class="font-bold">0</span></div>
+                    <div class="data-row"><span>iOS</span><span id="u-inst-ios" class="font-bold scaled">0</span></div>
+                    <div class="data-row"><span>Android</span><span id="u-inst-android" class="font-bold scaled">0</span></div>
+                    <div class="data-row"><span>Other (Mac, Windows, …)</span><span id="u-inst-other" class="font-bold scaled">0</span></div>
 
                     <h3 class="highlight-title" style="margin-top: 1.5rem;">Install Banner (Chrome/Edge)</h3>
-                    <div class="data-row"><span>Banner shown</span><span id="u-funnel-banner_shown" class="font-bold">0</span></div>
-                    <div class="data-row"><span>Banner dismissed</span><span id="u-funnel-banner_dismissed" class="font-bold">0</span></div>
-                    <div class="data-row"><span>Install prompt accepted</span><span id="u-funnel-prompt_accepted" class="font-bold">0</span></div>
-                    <div class="data-row"><span>Install prompt declined</span><span id="u-funnel-prompt_declined" class="font-bold">0</span></div>
-                    <div class="data-row"><span>Installed</span><span id="u-funnel-installed" class="font-bold">0</span></div>
+                    <div class="data-row"><span>Banner shown</span><span id="u-funnel-banner_shown" class="font-bold scaled">0</span></div>
+                    <div class="data-row"><span>Banner dismissed</span><span id="u-funnel-banner_dismissed" class="font-bold scaled">0</span></div>
+                    <div class="data-row"><span>Install prompt accepted</span><span id="u-funnel-prompt_accepted" class="font-bold scaled">0</span></div>
+                    <div class="data-row"><span>Install prompt declined</span><span id="u-funnel-prompt_declined" class="font-bold scaled">0</span></div>
+                    <div class="data-row"><span>Installed</span><span id="u-funnel-installed" class="font-bold scaled">0</span></div>
                 </div>
             </div>
-            <p class="text-xs mt-3" style="color: var(--card-paragraph-color);">Only visitors who accepted statistics are counted. Installs are counted on the first launch of the installed app.</p>
+            <p class="text-xs mt-3" style="color: var(--card-paragraph-color);">Only visitors who accepted statistics are counted. Unique visitors are counted per browser, so one person on two devices counts twice; logs from before v1.8.0 (per-visit IDs) overcount them. Installs are counted on the first launch of the installed app.</p>
         </div>
 
         </div>
@@ -745,22 +825,18 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         <div class="stats-group">
             <h2 class="section-heading">Filters &amp; Search <span id="filters-filter-note" class="filter-note"></span></h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div class="stat-card">
-                    <span id="f-changes" class="stat-number">0</span>
+                    <span id="f-changes" class="stat-number scaled">0</span>
                     <span class="stat-label">Filter Changes</span>
                 </div>
                 <div class="stat-card">
-                    <span id="f-sessions" class="stat-number">0</span>
+                    <span id="f-sessions" class="stat-number scaled">0</span>
                     <span class="stat-label">Sessions Using Filters</span>
                 </div>
                 <div class="stat-card">
-                    <span id="f-searches" class="stat-number">0</span>
+                    <span id="f-searches" class="stat-number scaled">0</span>
                     <span class="stat-label">Searches</span>
-                </div>
-                <div class="stat-card">
-                    <span id="f-zero" class="stat-number">0</span>
-                    <span class="stat-label">Searches With No Results</span>
                 </div>
             </div>
 
@@ -779,46 +855,14 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                             <tbody id="f-usage-table"></tbody>
                         </table>
                     </div>
-                    <div class="data-row" style="margin-top: 0.5rem;"><span>"Clear filters" clicked</span><span id="f-clears" class="font-bold">0</span></div>
-                </div>
-
-                <div class="highlight-section" style="margin-bottom: 0;">
-                    <h3 class="highlight-title">Searches With No Results</h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead>
-                                <tr class="border-b border-white/20">
-                                    <th class="py-2">Search</th>
-                                    <th class="py-2 text-right">Sessions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="f-zero-table"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="highlight-section" style="margin-bottom: 0;">
-                    <h3 class="highlight-title">Top Searches</h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead>
-                                <tr class="border-b border-white/20">
-                                    <th class="py-2">Search</th>
-                                    <th class="py-2 text-right">Sessions</th>
-                                    <th class="py-2 text-right">Results</th>
-                                </tr>
-                            </thead>
-                            <tbody id="f-search-table"></tbody>
-                        </table>
-                    </div>
+                    <div class="data-row" style="margin-top: 0.5rem;"><span>"Clear filters" clicked</span><span id="f-clears" class="font-bold scaled">0</span></div>
                 </div>
 
                 <div class="highlight-section" style="margin-bottom: 0;">
                     <div class="highlight-title flex items-center justify-between gap-4">
                         <h3>Top Selections</h3>
                         <select id="f-selection-select" onchange="renderSelections()" style="width: auto; height: 30px; padding: 0 0.5rem; font-size: 0.875rem; font-weight: 400;">
+                            <option value="session">Session</option>
                             <option value="style">Style</option>
                             <option value="brewery">Brewery</option>
                             <option value="country">Country</option>
@@ -838,7 +882,26 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     </div>
                 </div>
             </div>
-            <p class="text-xs mt-3" style="color: var(--card-paragraph-color);">Only visitors who accepted statistics are counted. Sessions reset when the app is closed, so they are not unique people. Results show how many beers matched, with any other active filters applied.</p>
+
+            <div>
+                <div class="highlight-section" style="margin-bottom: 0;">
+                    <h3 class="highlight-title">Top Searches</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-white/20">
+                                    <th class="py-2">Search</th>
+                                    <th class="py-2 text-right">Sessions</th>
+                                    <th class="py-2 text-right">Results</th>
+                                </tr>
+                            </thead>
+                            <tbody id="f-search-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            <p class="text-xs mt-3" style="color: var(--card-paragraph-color);">Only visitors who accepted statistics are counted. A session is one browser and is kept across visits, so one person on two devices counts twice (logs from before v1.8.0 used a new session per visit). Results show how many beers matched, with any other active filters applied.</p>
         </div>
         </div>
 
@@ -871,16 +934,16 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div class="stat-card">
-                    <span id="fav-total" class="stat-number">0</span>
+                    <span id="fav-total" class="stat-number scaled">0</span>
                     <span class="stat-label">Favorites</span>
                 </div>
                 <div class="stat-card">
-                    <span id="fav-sessions" class="stat-number">0</span>
+                    <span id="fav-sessions" class="stat-number scaled">0</span>
                     <span class="stat-label">Sessions Using Favorites</span>
                 </div>
                 <div class="stat-card">
                     <span id="fav-avg" class="stat-number">–</span>
-                    <span class="stat-label">Average per Session</span>
+                    <span class="stat-label">Avg / Median per Session</span>
                 </div>
                 <div class="stat-card">
                     <span id="fav-beers" class="stat-number">0</span>
@@ -903,7 +966,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                         <tbody id="favorites-table"></tbody>
                     </table>
                 </div>
-                <div class="data-row" style="margin-top: 0.5rem;"><span>Sessions that used the "Favorites" filter</span><span id="fav-filter-sessions" class="font-bold">0</span></div>
+                <div class="data-row" style="margin-top: 0.5rem;"><span>Sessions that used the "Favorites" filter</span><span id="fav-filter-sessions" class="font-bold scaled">0</span></div>
             </div>
         </div>
         </div>
@@ -935,11 +998,11 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div class="stat-card">
-                    <span id="r-total" class="stat-number">0</span>
+                    <span id="r-total" class="stat-number scaled">0</span>
                     <span class="stat-label">Total Ratings</span>
                 </div>
                 <div class="stat-card">
-                    <span id="r-users" class="stat-number">0</span>
+                    <span id="r-users" class="stat-number scaled">0</span>
                     <span class="stat-label">Unique Users</span>
                 </div>
                 <div class="stat-card">
@@ -1019,7 +1082,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         /**
          * Fetches new statistics in JSON format and triggers a UI update.
          */
-        async function refreshData() {
+        async function refreshData(silent = false) {
             const session = document.getElementById('session-select').value;
             const excludeRaters = document.getElementById('exclude-raters').checked ? '1' : '0';
             const device = document.getElementById('device-select').value;
@@ -1027,13 +1090,16 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             const filtersDevice = document.getElementById('filters-device-select').value;
             const favSession = document.getElementById('fav-session-select').value;
             const favDevice = document.getElementById('fav-device-select').value;
-            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}&device=${encodeURIComponent(device)}&usage_device=${encodeURIComponent(usageDevice)}&filters_device=${encodeURIComponent(filtersDevice)}&fav_session=${encodeURIComponent(favSession)}&fav_device=${encodeURIComponent(favDevice)}`;
+            const usageRange = usageWindowRange(document.getElementById('usage-window-select').value);
+            const url = `stats.php?format=json&session=${encodeURIComponent(session)}&exclude_raters=${excludeRaters}&device=${encodeURIComponent(device)}&usage_device=${encodeURIComponent(usageDevice)}&filters_device=${encodeURIComponent(filtersDevice)}&fav_session=${encodeURIComponent(favSession)}&fav_device=${encodeURIComponent(favDevice)}`
+                + (usageRange ? `&usage_from=${usageRange[0]}&usage_to=${usageRange[1]}` : '')
+                + `&usage_tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || '')}`;
 
             try {
                 const response = await fetch(url);
                 const data = await response.json();
                 updateUI(data);
-                showNotification();
+                if (!silent) showNotification();
             } catch (e) {
                 console.error("Refresh failed", e);
             }
@@ -1161,11 +1227,6 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyScroll);
         }
 
-        let usageHourly = {};
-
-        /**
-         * Renders visits per hour for the selected (local) day as stacked SVG bars.
-         */
         // Installed-app bars use the link colour, or a lighter text colour in themes where
         // the two are the same and the stacked segments would merge.
         function installedAppFill() {
@@ -1174,28 +1235,77 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             return same ? { color: 'var(--palette-text-primary)', opacity: 0.45 } : { color: 'var(--palette-link)', opacity: 1 };
         }
 
-        function renderUsageChart() {
+        const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const addDays = (ms, n) => { const d = new Date(ms); d.setDate(d.getDate() + n); return d.getTime(); };
+        const dayLabel = key => new Date(key + 'T12:00:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+
+        // Selected Usage time window in the viewer's local time: [from, to) in ms, or null for all time.
+        function usageWindowRange(value) {
+            const today = startOfDay(new Date());
+            if (value === 'today') return [today, addDays(today, 1)];
+            if (value === '7d') return [addDays(today, -6), addDays(today, 1)];
+            if (value.startsWith('day:')) {
+                const [y, m, d] = value.slice(4).split('-').map(Number);
+                const from = new Date(y, m - 1, d).getTime();
+                return [from, addDays(from, 1)];
+            }
+            return null;
+        }
+
+        // Offers all time, the last 7 days, today and every other day with a visit.
+        function fillUsageWindows(activeDays) {
+            const select = document.getElementById('usage-window-select');
+            const previous = select.value || 'all';
+            const today = localDayKey(new Date());
+            const days = activeDays.filter(d => d !== today).sort().reverse();
+            const options = [['all', 'All time'], ['7d', 'Last 7 days'], ['today', 'Today'], ...days.map(d => ['day:' + d, dayLabel(d)])];
+            select.innerHTML = '';
+            options.forEach(([value, label]) => {
+                const opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = label;
+                select.appendChild(opt);
+            });
+            if (options.some(([value]) => value === previous)) {
+                select.value = previous;
+            } else {
+                select.value = 'all';
+                refreshData(true);
+            }
+        }
+
+        // Visits per hour (a single day), day (up to 31 days) or week as stacked browser / installed-app
+        // bars, with a narrow inner bar for the unique visitors of each bucket. The server groups them.
+        function renderUsageChart(usage) {
+            const bucket = usage.bucket || 'day';
+            const buckets = (usage.buckets || []).map(b => {
+                const counts = [Number(b.browser) || 0, Number(b.standalone) || 0, Number(b.unique) || 0];
+                if (bucket === 'hour') {
+                    const hour = parseInt(b.key.slice(11, 13), 10);
+                    return { label: String(hour).padStart(2, '0') + ':00', tick: hour % 3 === 0 ? String(hour).padStart(2, '0') : '', counts };
+                }
+                const short = new Date(b.key + 'T12:00:00').toLocaleDateString([], bucket === 'week' ? { day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric' });
+                return { label: (bucket === 'week' ? 'Week of ' : '') + dayLabel(b.key), tick: short, counts };
+            });
+            if (bucket !== 'hour') {
+                const every = Math.ceil(buckets.length / 12);
+                buckets.forEach((b, i) => { if (i % every) b.tick = ''; });
+            }
+            document.getElementById('usage-chart-title').textContent = { hour: 'Activity by Hour', day: 'Activity by Day', week: 'Activity by Week' }[bucket];
+
             const host = document.getElementById('usage-chart');
             const installed = installedAppFill();
             const swatch = document.getElementById('usage-installed-swatch');
             swatch.style.background = installed.color;
             swatch.style.opacity = installed.opacity;
-            const day = document.getElementById('usage-day-select').value;
-            const bars = Array.from({ length: 24 }, () => [0, 0]);
-            Object.entries(usageHourly).forEach(([ms, counts]) => {
-                const d = new Date(Number(ms));
-                if (localDayKey(d) !== day) return;
-                bars[d.getHours()][0] += Number(counts[0]) || 0;
-                bars[d.getHours()][1] += Number(counts[1]) || 0;
-            });
 
             const W = 760, H = 240;
             const padL = 12, padR = 12, padT = 18, padB = 28;
             const plotW = W - padL - padR;
             const plotH = H - padT - padB;
-            const slot = plotW / 24;
+            const slot = plotW / Math.max(1, buckets.length);
             const barW = slot * 0.7;
-            const maxY = Math.max(1, ...bars.map(b => b[0] + b[1]));
+            const maxY = Math.max(1, ...buckets.map(b => b.counts[0] + b.counts[1]));
             const h = c => plotH * c / maxY;
 
             let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" '
@@ -1204,25 +1314,30 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             svg += '<line x1="' + padL + '" y1="' + baseY + '" x2="' + (W - padR) + '" y2="' + baseY
                 + '" stroke="var(--divider-color)" stroke-width="1" opacity="0.4"/>';
 
-            bars.forEach(([browser, standalone], hour) => {
-                const x = (padL + slot * hour + (slot - barW) / 2).toFixed(1);
+            buckets.forEach(({ label, tick, counts: [browser, standalone, unique] }, i) => {
+                const x = (padL + slot * i + (slot - barW) / 2).toFixed(1);
                 const total = browser + standalone;
-                const label = String(hour).padStart(2, '0') + ':00 — ' + total + ' (browser ' + browser + ', installed ' + standalone + ')';
+                const title = label + ' — ' + total + ' visits (browser ' + browser + ', installed ' + standalone + '), ' + unique + ' unique visitors';
                 if (browser > 0) {
                     svg += '<rect x="' + x + '" y="' + (baseY - h(browser)).toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h(browser).toFixed(1)
-                        + '" fill="var(--palette-text-primary)"><title>' + label + '</title></rect>';
+                        + '" fill="var(--palette-text-primary)"><title>' + title + '</title></rect>';
                 }
                 if (standalone > 0) {
                     svg += '<rect x="' + x + '" y="' + (baseY - h(total)).toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h(standalone).toFixed(1)
-                        + '" fill="' + installed.color + '" fill-opacity="' + installed.opacity + '"><title>' + label + '</title></rect>';
+                        + '" fill="' + installed.color + '" fill-opacity="' + installed.opacity + '"><title>' + title + '</title></rect>';
+                }
+                if (unique > 0) {
+                    const uniqueW = Math.max(2, barW * 0.3);
+                    svg += '<rect x="' + x + '" y="' + (baseY - h(unique)).toFixed(1) + '" width="' + uniqueW.toFixed(1) + '" height="' + h(unique).toFixed(1)
+                        + '" fill="var(--card-paragraph-color)"><title>' + title + '</title></rect>';
                 }
                 if (total > 0) {
                     svg += '<text x="' + (Number(x) + barW / 2).toFixed(1) + '" y="' + (baseY - h(total) - 4).toFixed(1)
                         + '" text-anchor="middle" font-size="10" fill="var(--card-paragraph-color)">' + total + '</text>';
                 }
-                if (hour % 3 === 0) {
-                    svg += '<text x="' + (padL + slot * hour + slot / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" '
-                        + 'fill="var(--card-paragraph-color)">' + String(hour).padStart(2, '0') + '</text>';
+                if (tick) {
+                    svg += '<text x="' + (padL + slot * i + slot / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" '
+                        + 'fill="var(--card-paragraph-color)">' + tick + '</text>';
                 }
             });
 
@@ -1235,11 +1350,11 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         }
 
         function updateUsage(usage) {
-            document.getElementById('u-visits').textContent = usage.visits;
-            document.getElementById('u-returns').textContent = usage.returns > 0 ? 'incl. ' + usage.returns + ' returns to an open tab' : '';
-            const pct = n => usage.visits > 0 ? Math.round(n / usage.visits * 100) + '%' : '–';
-            document.getElementById('u-browser').textContent = pct(usage.browser);
-            document.getElementById('u-standalone').textContent = pct(usage.standalone);
+            document.getElementById('u-visits').textContent = usage.visits + ' / ' + usage.unique_visitors;
+            const raw = usage.unscaled || usage;
+            const pct = n => raw.visits > 0 ? Math.round(n / raw.visits * 100) + '%' : '–';
+            document.getElementById('u-browser').textContent = pct(raw.browser);
+            document.getElementById('u-standalone').textContent = pct(raw.standalone);
             document.getElementById('u-installs').textContent = usage.installs;
             ['ios', 'android', 'other'].forEach(p => {
                 document.getElementById('u-inst-' + p).textContent = usage.installs_by_platform[p] || 0;
@@ -1249,21 +1364,8 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                 if (el) el.textContent = count;
             });
 
-            usageHourly = usage.hourly || {};
-            const daySelect = document.getElementById('usage-day-select');
-            const previous = daySelect.value;
-            const days = Array.from(new Set(Object.keys(usageHourly).map(ms => localDayKey(new Date(Number(ms)))))).sort().reverse();
-            const today = localDayKey(new Date());
-            if (!days.includes(today)) days.unshift(today);
-            daySelect.innerHTML = '';
-            days.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d;
-                opt.textContent = d === today ? 'Today' : new Date(d + 'T12:00:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-                daySelect.appendChild(opt);
-            });
-            daySelect.value = days.includes(previous) ? previous : days[0];
-            renderUsageChart();
+            fillUsageWindows(usage.active_days || []);
+            renderUsageChart(usage);
         }
 
         const FILTER_LABELS = {
@@ -1311,13 +1413,9 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             document.getElementById('f-changes').textContent = filters.changes;
             document.getElementById('f-sessions').textContent = filters.sessions;
             document.getElementById('f-searches').textContent = filters.searches;
-            document.getElementById('f-zero').textContent = filters.searches > 0
-                ? filters.zero_result_searches + ' (' + Math.round(filters.zero_result_searches / filters.searches * 100) + '%)'
-                : '0';
             document.getElementById('f-clears').textContent = filters.clears;
 
             fillTable('f-usage-table', filters.usage.map(u => [FILTER_LABELS[u.filter] || u.filter, String(u.times), String(u.sessions)]), 'No filters used yet');
-            fillTable('f-zero-table', filters.zero_result_terms.map(z => [z.term, String(z.sessions)]), 'No searches without results');
             fillTable('f-search-table', filters.top_searches.map(t => [t.term, String(t.sessions), t.results === null ? '–' : String(t.results)]), 'No searches yet');
             filterSelections = filters.selections || {};
             renderSelections();
@@ -1326,7 +1424,8 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         function updateFavorites(fav, labels) {
             document.getElementById('fav-total').textContent = fav.total;
             document.getElementById('fav-sessions').textContent = fav.sessions;
-            document.getElementById('fav-avg').textContent = fav.sessions > 0 ? (fav.total / fav.sessions).toFixed(1) : '–';
+            const favRaw = fav.unscaled || fav;
+            document.getElementById('fav-avg').textContent = favRaw.sessions > 0 ? (favRaw.total / favRaw.sessions).toFixed(1) + ' / ' + fav.median_per_session : '–';
             document.getElementById('fav-beers').textContent = fav.beers;
             document.getElementById('fav-filter-sessions').textContent = fav.filter_sessions;
 
@@ -1381,11 +1480,59 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
             }
         }
 
+        // Answers to the consent banner per acceptance: how much larger the counts would be if everyone
+        // who answered had accepted, assuming people who declined use the app like those who accepted.
+        function consentFactor(visitors) {
+            return visitors && visitors.yes > 0 ? visitors.total / visitors.yes : null;
+        }
+
+        // Copy of the stats with plain counts scaled by the factor. Shares, averages, medians, rating
+        // scores and distinct counts (beers favourited or rated) are left unchanged.
+        function simulateFullConsent(data, factor) {
+            const d = structuredClone(data);
+            // Ratios are computed from the unscaled counts, so rounding can't shift them.
+            d.usage.unscaled = { visits: data.usage.visits, browser: data.usage.browser, standalone: data.usage.standalone };
+            d.favorites.unscaled = { total: data.favorites.total, sessions: data.favorites.sessions };
+            const scale = n => Math.round((Number(n) || 0) * factor);
+            const scaleKeys = (obj, keys) => keys.forEach(k => { if (obj && typeof obj[k] === 'number') obj[k] = scale(obj[k]); });
+            const scaleValues = obj => Object.keys(obj || {}).forEach(k => { obj[k] = scale(obj[k]); });
+            scaleKeys(d.usage, ['visits', 'unique_visitors', 'browser', 'standalone', 'installs']);
+            scaleValues(d.usage.installs_by_platform);
+            scaleValues(d.usage.funnel);
+            (d.usage.buckets || []).forEach(b => scaleKeys(b, ['browser', 'standalone', 'unique']));
+            scaleKeys(d.filters, ['changes', 'clears', 'sessions', 'searches']);
+            (d.filters.usage || []).forEach(u => scaleKeys(u, ['times', 'sessions']));
+            Object.values(d.filters.selections || {}).forEach(list => list.forEach(x => scaleKeys(x, ['count'])));
+            (d.filters.top_searches || []).forEach(x => scaleKeys(x, ['sessions']));
+            scaleKeys(d.favorites, ['total', 'sessions', 'filter_sessions']);
+            (d.favorites.top || []).forEach(x => scaleKeys(x, ['favorites', 'ratings']));
+            scaleKeys(d.engagement, ['total_ratings', 'unique_users']);
+            Object.values(d.top_beers || {}).forEach(x => scaleKeys(x, ['count']));
+            Object.values(d.highlights || {}).forEach(x => scaleKeys(x, ['count']));
+            return d;
+        }
+
+        function toggleSimulation() {
+            try { localStorage.setItem('statsSimulateConsent', document.getElementById('simulate-consent').checked ? '1' : ''); } catch (e) {}
+            if (lastData) updateUI(lastData);
+        }
+
         /**
          * Updates the DOM with calculated metrics.
          */
         function updateUI(data) {
             lastData = data;
+            const consent = data.consent_all || data.visitors;
+            const factor = consentFactor(consent);
+            const simulate = document.getElementById('simulate-consent').checked && factor !== null;
+            document.body.classList.toggle('simulating', simulate);
+            const simNote = document.getElementById('simulate-note');
+            simNote.classList.toggle('hidden', !document.getElementById('simulate-consent').checked);
+            simNote.textContent = simulate
+                ? 'Simulating 100% consent: counts are scaled ×' + factor.toFixed(2) + ' (' + consent.yes + ' of ' + consent.total
+                    + ' consent answers accepted, all devices), assuming people who declined use the app like those who accepted. Counts in cards and tables are scaled; percentages, averages and distinct counts are unchanged.'
+                : 'Simulating 100% consent needs at least one accepted consent answer.';
+            if (simulate) data = simulateFullConsent(data, factor);
             // Visitors
             document.getElementById('v-total').textContent = data.visitors.total;
             document.getElementById('v-yes').textContent = data.visitors.yes;
@@ -1558,7 +1705,9 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
 
         // Initialize display and set background refresh interval
         selectTab(location.hash.slice(1));
+        try { document.getElementById('simulate-consent').checked = localStorage.getItem('statsSimulateConsent') === '1'; } catch (e) {}
         updateUI(<?php echo json_encode($initialData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>);
+        refreshData(true);  // the server-rendered data uses the server's time zone for the Usage chart
         setInterval(() => {
             if (document.getElementById('auto-reload').checked) refreshData();
         }, 30000);
