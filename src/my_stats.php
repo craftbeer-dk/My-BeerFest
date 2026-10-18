@@ -118,26 +118,7 @@ $translationsJson = json_encode($translations);
             border-bottom: none;
         }
 
-        /* Navigation Button - Matching info-container button style */
-        .nav-button {
-            background-color: var(--button-primary-background-color);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.375rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            border: none;
-            display: inline-flex;
-            align-items: center;
-            text-decoration: none;
-            margin-bottom: 1.5rem;
-        }
 
-        .nav-button:hover {
-            background-color: var(--button-primary-hover-bg);
-            text-decoration: none;
-        }
 
         .no-data {
             text-align: center;
@@ -147,17 +128,37 @@ $translationsJson = json_encode($translations);
             border-radius: 0.5rem;
             color: var(--card-paragraph-color);
         }
+        .page-close {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 0.75rem;
+        }
+        .close-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.375rem;
+            background-color: var(--card-background-color);
+            border: 1px solid var(--card-border-color);
+            color: var(--card-paragraph-color);
+            transition: background-color 0.2s;
+        }
+        .close-button:hover {
+            background-color: var(--palette-interactive);
+        }
+        .close-button svg {
+            width: 1.6rem;
+            height: 1.6rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Reverting Back Link to App Button style -->
-        <a href="index.php" class="nav-button">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <?php echo t('back_to_app_link', 'Back to the app'); ?>
-        </a>
+        <div class="page-close">
+            <a href="index.php" class="close-button" aria-label="<?php echo t('back_to_app_link', 'Back to the app'); ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></a>
+        </div>
 
         <!-- Header matching index.php -->
         <h1 class="text-4xl font-bold text-center mb-6 p-4 rounded-lg shadow-lg" style="background-color: var(--title-bg-color); color: var(--title-text-color);">
