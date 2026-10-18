@@ -252,7 +252,6 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             border: 1px solid var(--card-border-color);
             border-radius: 0.5rem;
             padding: 0.75rem;
-            margin-bottom: 0.75rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
@@ -436,11 +435,13 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             -webkit-mask-repeat: no-repeat;
             mask-repeat: no-repeat;
         }
+        .beer-grid {
+            display: grid;
+            gap: 1rem;
+        }
         @media (min-width: 640px) {
             .beer-grid {
-                display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                gap: 1rem;
             }
         }
         .error-message {
@@ -456,7 +457,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             border: 1px solid var(--section-border-color);
             border-radius: 0.5rem;
             padding: 1.5rem;
-            margin-top: 2rem;
+            margin-top: 1rem;
             margin-bottom: 1rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             text-align: center;
@@ -998,8 +999,8 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
         </div>
 
         <!-- Load More Button -->
-        <div id="load-more-container" class="flex justify-center mt-8 mb-4 hidden">
-            <button id="load-more-button" class="info-container m-0" style="padding: 0.75rem 2rem;">
+        <div id="load-more-container" class="flex justify-center mt-4 hidden">
+            <button id="load-more-button" class="info-container" style="margin: 0; padding: 0.75rem 2rem;">
                 <?php echo htmlspecialchars($translations['load_more_button'] ?? 'Load more beers'); ?>
             </button>
         </div>
