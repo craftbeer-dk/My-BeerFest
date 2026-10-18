@@ -703,7 +703,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                     </div>
                     <div class="flex gap-4 text-xs mb-2" style="color: var(--card-paragraph-color);">
                         <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background: var(--palette-text-primary);"></span>Browser</span>
-                        <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background: var(--palette-link);"></span>Installed app</span>
+                        <span><span id="usage-installed-swatch" class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background: var(--palette-link);"></span>Installed app</span>
                     </div>
                     <div id="usage-chart" class="overflow-x-auto" style="flex: 1; min-height: 220px;"></div>
                 </div>
@@ -1166,8 +1166,20 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
         /**
          * Renders visits per hour for the selected (local) day as stacked SVG bars.
          */
+        // Installed-app bars use the link colour, or a lighter text colour in themes where
+        // the two are the same and the stacked segments would merge.
+        function installedAppFill() {
+            const css = getComputedStyle(document.documentElement);
+            const same = css.getPropertyValue('--palette-link').trim().toLowerCase() === css.getPropertyValue('--palette-text-primary').trim().toLowerCase();
+            return same ? { color: 'var(--palette-text-primary)', opacity: 0.45 } : { color: 'var(--palette-link)', opacity: 1 };
+        }
+
         function renderUsageChart() {
             const host = document.getElementById('usage-chart');
+            const installed = installedAppFill();
+            const swatch = document.getElementById('usage-installed-swatch');
+            swatch.style.background = installed.color;
+            swatch.style.opacity = installed.opacity;
             const day = document.getElementById('usage-day-select').value;
             const bars = Array.from({ length: 24 }, () => [0, 0]);
             Object.entries(usageHourly).forEach(([ms, counts]) => {
@@ -1202,7 +1214,7 @@ $festivalTitle = getenv('FESTIVAL_TITLE') ?: t('default_festival_title', 'My Bee
                 }
                 if (standalone > 0) {
                     svg += '<rect x="' + x + '" y="' + (baseY - h(total)).toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h(standalone).toFixed(1)
-                        + '" fill="var(--palette-link)"><title>' + label + '</title></rect>';
+                        + '" fill="' + installed.color + '" fill-opacity="' + installed.opacity + '"><title>' + label + '</title></rect>';
                 }
                 if (total > 0) {
                     svg += '<text x="' + (Number(x) + barW / 2).toFixed(1) + '" y="' + (baseY - h(total) - 4).toFixed(1)
