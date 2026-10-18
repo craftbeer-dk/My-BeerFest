@@ -54,25 +54,6 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             padding: 1rem;
         }
 
-        /* Navigation Button */
-        .nav-button {
-            background-color: var(--button-primary-background-color);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.375rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            border: none;
-            display: inline-flex;
-            align-items: center;
-            text-decoration: none;
-            margin-bottom: 1.5rem;
-        }
-        .nav-button:hover {
-            background-color: var(--button-primary-hover-bg);
-            text-decoration: none;
-        }
 
         /* Sections */
         .highlight-section {
@@ -705,14 +686,37 @@ $beersJson = json_encode($beers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                 max-width: none;
             }
         }
+        .page-close {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 0.75rem;
+        }
+        .close-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.375rem;
+            background-color: var(--card-background-color);
+            border: 1px solid var(--card-border-color);
+            color: var(--card-paragraph-color);
+            transition: background-color 0.2s;
+        }
+        .close-button:hover {
+            background-color: var(--palette-interactive);
+        }
+        .close-button svg {
+            width: 1.6rem;
+            height: 1.6rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="index.php" class="nav-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.5rem"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            Back
-        </a>
+        <div class="page-close">
+            <a href="index.php" class="close-button" aria-label="Back to the app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></a>
+        </div>
 
         <h1 class="text-4xl font-semibold text-center mb-6 p-4 rounded-lg shadow-lg"
             style="background-color: var(--title-bg-color); color: var(--title-text-color);">

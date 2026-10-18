@@ -341,6 +341,9 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             margin-bottom: 0.5rem;
             color: var(--label-color);
         }
+        .filter-sort-section .filter-checks label, .filter-sort-section .filter-checks input[type="checkbox"] {
+            margin-bottom: 0;
+        }
         .filter-sort-section select, .filter-sort-section input[type="checkbox"], .rating-select, .search-input {
             padding: 0.5rem;
             border: 1px solid var(--input-border-color);
@@ -364,14 +367,16 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
         }
         .search-container {
             position: relative;
-            top: 5px;
             display: flex;
             align-items: center;
+        }
+        .search-section .search-input {
+            margin-bottom: 0;
         }
         .clear-search-btn {
             position: absolute;
             right: 0.25rem;
-            top: 42%;
+            top: 50%;
             transform: translateY(-50%);
             background: transparent;
             border: none;
@@ -389,6 +394,9 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             border-radius: 0.375rem;
             font-size: 0.875rem;
             text-align: center;
+        }
+        .beer-card .rating-select {
+            margin-bottom: 0;
         }
         .beer-actions-container {
             display: flex;
@@ -456,6 +464,9 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
         .info-container p {
             margin-bottom: 1rem;
             color: var(--card-paragraph-color);
+        }
+        .info-container > p:last-child {
+            margin-bottom: 0;
         }
         .info-container button {
             background-color: var(--button-primary-background-color);
@@ -667,8 +678,6 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            margin-top: 5px;
-            margin-bottom: 0.5rem;
             padding: 0.5rem 0.75rem;
             border: 1px solid var(--input-border-color);
             border-radius: 0.375rem;
@@ -710,6 +719,12 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
         body.map-is-open {
             overflow: hidden;
         }
+        /* The bottom banners sit above the map; they come back when it closes. */
+        body.map-is-open .consent-banner,
+        body.map-is-open .install-banner,
+        body.map-is-open .update-banner {
+            display: none;
+        }
         .map-overlay {
             position: fixed;
             inset: 0;
@@ -723,31 +738,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             display: none;
         }
         .map-header {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.75rem 1rem;
             padding: max(1rem, env(safe-area-inset-top)) 1rem 1rem;
-        }
-        .map-header .nav-button {
-            display: inline-flex;
-            align-items: center;
-            background-color: var(--button-primary-background-color);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.375rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            border: none;
-        }
-        .map-header .nav-button:hover {
-            background-color: var(--button-primary-hover-bg);
-        }
-        .map-header .nav-button svg {
-            width: 1.25rem;
-            height: 1.25rem;
-            margin-right: 0.5rem;
         }
         .map-icon-button {
             display: inline-flex;
@@ -774,16 +765,32 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             width: 1.25rem;
             height: 1.25rem;
         }
-        .map-tabs {
-            flex: 1 1 auto;
+        .map-toolbar {
             display: flex;
-            flex-wrap: wrap;
+            align-items: flex-start;
             gap: 0.5rem;
             padding: 1rem;
             background-color: var(--section-background-color);
             border: 1px solid var(--section-border-color);
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .map-tabs {
+            flex: 1 1 auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .map-tab.map-close-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            padding: 0.5rem;
+        }
+        .map-close-button svg {
+            width: 1.6em;
+            height: 1.6em;
         }
         .map-tab {
             padding: 0.5rem 1rem;
@@ -803,6 +810,14 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             border-color: transparent;
             color: white;
         }
+        @media (max-width: 639px) {
+            .map-toolbar {
+                padding: 0.75rem;
+            }
+            .map-tab {
+                padding: 0.5rem 0.75rem;
+            }
+        }
         .map-viewport {
             position: relative;
             flex: 1;
@@ -820,10 +835,11 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
         .map-floor[hidden] {
             display: none;
         }
+        /* Kept clear of rounded screen corners and the home bar on phones. */
         .map-zoom-controls {
             position: absolute;
-            right: 0.75rem;
-            bottom: max(0.75rem, env(safe-area-inset-bottom));
+            right: 1rem;
+            bottom: 2rem;
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
@@ -881,7 +897,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                             <option value=""><?php echo htmlspecialchars($translations['all_countries'] ?? 'All Countries'); ?></option>
                         </select>
                     </div>
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 md:mt-0 col-span-1 md:col-span-2 lg:col-span-4">
+                    <div class="filter-checks flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 md:mt-0 col-span-1 md:col-span-2 lg:col-span-4">
                         <div class="flex items-center">
                             <input type="checkbox" id="my-rated-filter" class="mr-2 rounded">
                             <label for="my-rated-filter"><?php echo htmlspecialchars($translations['my_rated_beers'] ?? 'My Rated Beers'); ?></label>
@@ -899,7 +915,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                 <button id="clear-filters-button" class="clear-filters-button mt-4 hidden"><?php echo htmlspecialchars($translations['clear_filters_button'] ?? 'Clear Filters'); ?></button>
 
                 <!-- Divider -->
-                <hr class="my-6" style="border-color: var(--divider-color);">
+                <hr class="my-4" style="border-color: var(--divider-color);">
 
                 <!-- Sorting Controls -->
                 <div>
@@ -1012,11 +1028,12 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
 <?php if (!empty($festivalMaps)): ?>
     <div id="map-overlay" class="map-overlay" role="dialog" aria-modal="true" aria-label="<?php echo htmlspecialchars($translations['map_title'] ?? 'Festival map'); ?>" hidden>
         <div class="map-header">
-            <button type="button" id="map-close-button" class="nav-button">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                <?php echo htmlspecialchars($translations['back_to_app_link'] ?? 'Back to the app'); ?>
-            </button>
-            <div id="map-tabs" class="map-tabs" role="tablist"></div>
+            <div class="map-toolbar">
+                <div id="map-tabs" class="map-tabs" role="tablist"></div>
+                <button type="button" id="map-close-button" class="map-tab map-close-button" aria-label="<?php echo htmlspecialchars($translations['back_to_app_link'] ?? 'Back to the app'); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                </button>
+            </div>
         </div>
         <div id="map-viewport" class="map-viewport">
             <div class="map-zoom-controls">
