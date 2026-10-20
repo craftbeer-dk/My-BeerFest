@@ -71,21 +71,24 @@ self.addEventListener('activate', event => {
   })());
 });
 
+const NAVIGATION_TIMEOUT_MS = 3000;
+
 // Stale-while-revalidate: serve cache instantly, refresh in background.
 // Evicts the cached entry when the network response is no-store/private so
 // a NOT_PUBLIC toggle self-heals on the next request.
-function staleWhileRevalidate(request, cache) {
+function staleWhileRevalidate(event, cache) {
+  const request = event.request;
   return cache.match(request).then(cachedResponse => {
     const networkFetch = fetch(request).then(networkResponse => {
       if (shouldCache(networkResponse)) {
-        cache.put(request, networkResponse.clone());
+        event.waitUntil(cache.put(request, networkResponse.clone()));
       } else {
-        cache.delete(request);
+        event.waitUntil(cache.delete(request));
       }
       return networkResponse;
     });
     if (cachedResponse) {
-      networkFetch.catch(() => {});
+      event.waitUntil(networkFetch.catch(() => {}));
       return cachedResponse;
     }
     return networkFetch;
@@ -108,7 +111,7 @@ self.addEventListener('fetch', event => {
   // Google Fonts: stale-while-revalidate so fonts work offline.
   if (isFonts) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(cache => staleWhileRevalidate(event.request, cache))
+      caches.open(CACHE_NAME).then(cache => staleWhileRevalidate(event, cache))
     );
     return;
   }
@@ -124,9 +127,9 @@ self.addEventListener('fetch', event => {
         fetch(event.request)
           .then(networkResponse => {
             if (shouldCache(networkResponse)) {
-              cache.put(event.request, networkResponse.clone());
+              event.waitUntil(cache.put(event.request, networkResponse.clone()));
             } else {
-              cache.delete(event.request);
+              event.waitUntil(cache.delete(event.request));
             }
             return networkResponse;
           })
@@ -136,33 +139,33 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Document navigations: cache-first with preload-backed revalidation, and
-  // an app-shell fallback when both cache and network are unavailable.
+  // Document navigations: network-first with a timeout, cached page as fallback.
   if (event.request.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      const cachedResponse = await cache.match(event.request);
 
       const networkFetch = (async () => {
         const preload = event.preloadResponse ? await event.preloadResponse : null;
         const networkResponse = preload || await fetch(event.request);
         if (shouldCache(networkResponse)) {
-          cache.put(event.request, networkResponse.clone());
+          event.waitUntil(cache.put(event.request, networkResponse.clone()));
         } else {
-          cache.delete(event.request);
+          event.waitUntil(cache.delete(event.request));
         }
         return networkResponse;
       })();
 
-      if (cachedResponse) {
-        networkFetch.catch(() => {});
-        return cachedResponse;
-      }
+      event.waitUntil(networkFetch.catch(() => {}));
+      const timeout = new Promise(resolve => setTimeout(resolve, NAVIGATION_TIMEOUT_MS, null));
+      try {
+        const fresh = await Promise.race([networkFetch, timeout]);
+        if (fresh) return fresh;
+      } catch {}
+      const cachedResponse = await cache.match(event.request) || await cache.match('/');
+      if (cachedResponse) return cachedResponse;
       try {
         return await networkFetch;
       } catch {
-        const shell = await cache.match('/');
-        if (shell) return shell;
         return new Response('Offline', {
           status: 503,
           headers: { 'Content-Type': 'text/plain' },
@@ -174,6 +177,6 @@ self.addEventListener('fetch', event => {
 
   // Everything else (same-origin assets): stale-while-revalidate.
   event.respondWith(
-    caches.open(CACHE_NAME).then(cache => staleWhileRevalidate(event.request, cache))
+    caches.open(CACHE_NAME).then(cache => staleWhileRevalidate(event, cache))
   );
 });
