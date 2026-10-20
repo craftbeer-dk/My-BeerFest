@@ -57,6 +57,7 @@ if ($notPublic) {
         exit;
     }
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+    header('Cache-Control: no-cache');
 }
 
 header('Content-Type: application/json');

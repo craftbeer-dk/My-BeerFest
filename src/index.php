@@ -190,6 +190,12 @@ if (is_readable($styleGroupsFile)) {
 // Optional floor maps (data/maps/*.svg), inlined so they work offline.
 require_once __DIR__ . '/map_loader.php';
 $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
+
+$contentVersion = substr(md5(json_encode(array(
+    $festivalMaps, $routes, $styleOrder, $translations, $festivalTitle, $festivalInfoText,
+    $festivalTitleShort, $themeColor, $contactEmail, $enableStatisticsLogging, filemtime(__FILE__),
+))), 0, 12);
+header('X-Content-Version: ' . $contentVersion);
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars($appLanguage); ?>">
@@ -1144,6 +1150,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             const enableStatisticsLogging = <?php echo json_encode($enableStatisticsLogging); ?>;
             const enableMainstyleFiltering = <?php echo json_encode(true); ?>;
             const routes = <?php echo json_encode($routes); ?>;
+            const contentVersion = <?php echo json_encode($contentVersion); ?>;
             const styleOrder = <?php echo json_encode($styleOrder); ?>;
             const beerDataUrl = '/data/beers.json';
 
@@ -1815,7 +1822,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             
             async function refreshDataIfNeeded() {
                 try {
-                    const response = await fetch(beerDataUrl + '?t=' + new Date().getTime()); // Cache-busting
+                    const response = await fetch(beerDataUrl, { cache: 'no-cache' });
                     if (!response.ok) return;
 
                     const newBeers = await response.json();
@@ -2043,10 +2050,27 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                         if (now - lastFetchTimestamp > REFRESH_INTERVAL) {
                             lastFetchTimestamp = now;
                             refreshDataIfNeeded();
+                            checkContentVersion();
                         }
                     }
                 });
             }
+
+            let contentUpdateAvailable = false;
+            async function checkContentVersion() {
+                try {
+                    const response = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+                    const latest = response.headers.get('X-Content-Version');
+                    if (latest && latest !== contentVersion) {
+                        contentUpdateAvailable = true;
+                        document.getElementById('update-banner').classList.remove('hidden');
+                    }
+                } catch (e) { /* offline */ }
+            }
+            document.getElementById('update-app-button').addEventListener('click', () => {
+                if (contentUpdateAvailable && !window.swUpdateReady) location.reload();
+            });
+            setTimeout(checkContentVersion, 10000);
 
             // --- Floor map ---
             // Each SVG is shown as authored inside its own shadow root, so its styles and ids stay
@@ -2751,8 +2775,8 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
                 return res.json();
             };
             Promise.all([
-                fetch(beerDataUrl).then(asJson),
-                fetch('data/flags.json').then(asJson)
+                fetch(beerDataUrl, { cache: 'no-cache' }).then(asJson),
+                fetch('data/flags.json', { cache: 'no-cache' }).then(asJson)
             ])
             .then(([beers, flags]) => {
                 lastFetchTimestamp = new Date().getTime();
@@ -2793,11 +2817,15 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             let newWorker;
 
             function showUpdateBar() {
+                window.swUpdateReady = true;
                 const banner = document.getElementById('update-banner');
                 if(banner) banner.classList.remove('hidden');
             }
 
             navigator.serviceWorker.register('/sw.js').then(reg => {
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') reg.update().catch(() => {});
+                });
                 reg.addEventListener('updatefound', () => {
                     newWorker = reg.installing;
                     newWorker.addEventListener('statechange', () => {
@@ -2818,7 +2846,7 @@ $festivalMaps = loadFestivalMaps(__DIR__ . '/data/maps');
             const updateButton = document.getElementById('update-app-button');
             if(updateButton) {
                 updateButton.addEventListener('click', () => {
-                    newWorker.postMessage({ action: 'skipWaiting' });
+                    if (newWorker) newWorker.postMessage({ action: 'skipWaiting' });
                 });
             }
         }
