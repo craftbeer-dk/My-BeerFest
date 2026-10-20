@@ -2056,20 +2056,16 @@ header('X-Content-Version: ' . $contentVersion);
                 });
             }
 
-            let contentUpdateAvailable = false;
             async function checkContentVersion() {
                 try {
                     const response = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
                     const latest = response.headers.get('X-Content-Version');
                     if (latest && latest !== contentVersion) {
-                        contentUpdateAvailable = true;
                         document.getElementById('update-banner').classList.remove('hidden');
                     }
                 } catch (e) { /* offline */ }
             }
-            document.getElementById('update-app-button').addEventListener('click', () => {
-                if (contentUpdateAvailable && !window.swUpdateReady) location.reload();
-            });
+            document.getElementById('update-app-button').addEventListener('click', () => location.reload());
             setTimeout(checkContentVersion, 10000);
 
             // --- Floor map ---
@@ -2814,41 +2810,23 @@ header('X-Content-Version: ' . $contentVersion);
     <script>
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
-            let newWorker;
-
-            function showUpdateBar() {
-                window.swUpdateReady = true;
-                const banner = document.getElementById('update-banner');
-                if(banner) banner.classList.remove('hidden');
-            }
-
             navigator.serviceWorker.register('/sw.js').then(reg => {
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') reg.update().catch(() => {});
                 });
-                reg.addEventListener('updatefound', () => {
-                    newWorker = reg.installing;
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                           showUpdateBar();
-                        }
-                    });
-                });
             });
 
+            let hadController = !!navigator.serviceWorker.controller;
             let refreshing;
             navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!hadController) {
+                    hadController = true;
+                    return;
+                }
                 if (refreshing) return;
-                window.location.reload();
                 refreshing = true;
+                window.location.reload();
             });
-
-            const updateButton = document.getElementById('update-app-button');
-            if(updateButton) {
-                updateButton.addEventListener('click', () => {
-                    if (newWorker) newWorker.postMessage({ action: 'skipWaiting' });
-                });
-            }
         }
 
         // PWA Install Prompt
