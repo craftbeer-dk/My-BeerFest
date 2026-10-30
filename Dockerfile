@@ -15,7 +15,7 @@ ARG APP_VERSION=dev
 RUN sed -i "s/__APP_VERSION__/${APP_VERSION}/" src/sw.js
 
 # Stage 2: PHP-FPM Image
-FROM php:8.2-fpm-alpine AS php
+FROM php:8.5-fpm-alpine AS php
 
 # Install system dependencies
 RUN apk add --no-cache curl gnupg
